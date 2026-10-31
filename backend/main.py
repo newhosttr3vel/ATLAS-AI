@@ -140,6 +140,11 @@ def create_task(
     title_map = {
         "qualify_lead": f"تأهيل عميل: {lead.customer_name}",
         "build_offer": f"إعداد مسودة عرض: {lead.customer_name}",
+        "prepare_cost_sheet": f"مراجعة تكاليف: {lead.customer_name}",
+        "draft_invoice": f"مسودة فاتورة: {lead.customer_name}",
+        "draft_marketing_content": f"محتوى تسويقي: {lead.customer_name}",
+        "draft_customer_reply": f"مسودة رد للعميل: {lead.customer_name}",
+        "classify_complaint": f"تصنيف شكوى: {lead.customer_name}",
     }
     task = Task(
         agency_id=agency_id,
@@ -262,34 +267,20 @@ def list_agents(
     agency_id: str = Depends(_agency_id),
 ) -> list[dict[str, Any]]:
     definitions = [
-        {
-            "agent_id": "general_manager",
-            "name": "General Manager",
-            "role": "Routes requests, coordinates teams, and escalates work for owner review.",
-            "manager_id": None,
-            "department": "Management",
-        },
-        {
-            "agent_id": "sales_crew",
-            "name": "Sales Manager",
-            "role": "Coordinates lead qualification and draft offer preparation.",
-            "manager_id": "general_manager",
-            "department": "Sales",
-        },
-        {
-            "agent_id": "lead_qualifier",
-            "name": "Lead Qualifier Agent",
-            "role": "Checks lead completeness and identifies missing travel details.",
-            "manager_id": "sales_crew",
-            "department": "Sales",
-        },
-        {
-            "agent_id": "offer_builder",
-            "name": "Offer Builder Agent",
-            "role": "Creates draft package structures without invented prices or availability.",
-            "manager_id": "sales_crew",
-            "department": "Sales",
-        },
+        {"agent_id": "general_manager", "name": "General Manager", "role": "Routes requests and coordinates departments for owner review.", "manager_id": None, "department": "Management", "is_manager": True},
+        {"agent_id": "sales_crew", "name": "Sales Manager", "role": "Coordinates lead qualification and draft offer preparation.", "manager_id": "general_manager", "department": "Sales", "is_manager": True},
+        {"agent_id": "lead_qualifier", "name": "Lead Qualifier Agent", "role": "Checks lead completeness and identifies missing travel details.", "manager_id": "sales_crew", "department": "Sales"},
+        {"agent_id": "offer_builder", "name": "Offer Builder Agent", "role": "Creates draft package structures without invented prices or availability.", "manager_id": "sales_crew", "department": "Sales"},
+        {"agent_id": "finance_manager", "name": "Finance Manager", "role": "Coordinates cost review and invoice preparation; owner approval required.", "manager_id": "general_manager", "department": "Finance", "is_manager": True},
+        {"agent_id": "costing_agent", "name": "Costing Agent", "role": "Prepares cost worksheets and flags missing supplier quotes; never invents prices.", "manager_id": "finance_manager", "department": "Finance"},
+        {"agent_id": "invoice_agent", "name": "Invoice Agent", "role": "Prepares internal invoice drafts; cannot issue or collect payments.", "manager_id": "finance_manager", "department": "Finance"},
+        {"agent_id": "marketing_manager", "name": "Marketing Manager", "role": "Coordinates reviewable campaign content and marketing work.", "manager_id": "general_manager", "department": "Marketing", "is_manager": True},
+        {"agent_id": "marketing_content_agent", "name": "Content Agent", "role": "Drafts bilingual travel copy from recorded facts without unverified claims.", "manager_id": "marketing_manager", "department": "Marketing"},
+        {"agent_id": "customer_success_manager", "name": "Customer Success Manager", "role": "Coordinates support and complaint handling; no automatic customer contact.", "manager_id": "general_manager", "department": "Customer Success", "is_manager": True},
+        {"agent_id": "support_agent", "name": "Support Agent", "role": "Drafts customer replies for employee review; never sends messages.", "manager_id": "customer_success_manager", "department": "Customer Success"},
+        {"agent_id": "complaint_handler", "name": "Complaint Handler", "role": "Classifies complaint notes and suggests human review steps.", "manager_id": "customer_success_manager", "department": "Customer Success"},
+        {"agent_id": "reporting_manager", "name": "Reporting Manager", "role": "Oversees reports generated from agency records.", "manager_id": "general_manager", "department": "Reporting", "is_manager": True},
+        {"agent_id": "report_writer", "name": "Report Writer", "role": "Summarizes recorded operational metrics; no external data is assumed.", "manager_id": "reporting_manager", "department": "Reporting"},
     ]
     response: list[dict[str, Any]] = []
     for definition in definitions:

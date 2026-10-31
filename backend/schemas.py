@@ -45,7 +45,10 @@ class LeadRead(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    task_type: Literal["qualify_lead", "build_offer"]
+    task_type: Literal[
+        "qualify_lead", "build_offer", "prepare_cost_sheet", "draft_invoice",
+        "draft_marketing_content", "draft_customer_reply", "classify_complaint",
+    ]
     lead_id: str
     instructions: str | None = Field(default=None, max_length=3000)
 

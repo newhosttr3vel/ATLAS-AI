@@ -11,7 +11,7 @@ ATLAS AI is a cloud-first prototype for travel-agency operations. The system use
 |---|---|---|
 | 1 | Cloud-first repository, Codespaces, Docker, documentation, CI and Pages setup | Complete |
 | 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented |
-| 3 | Finance, Marketing, Customer Success, Reporting and expanded approval policies | Planned |
+| 3 | Initial Finance, Marketing, Customer Success workflows and expanded approval policies | Implemented (initial workflows) |
 | 4 | Streamlit Control Center connected to the API | Implemented (initial functional UI) |
 | 5 | Bilingual static landing page and interactive mock demo | Planned |
 | 6 | Expanded tests, security hardening and production deployment guidance | Planned |
@@ -38,8 +38,8 @@ Open forwarded port **8501** from the Codespaces **Ports** panel. The applicatio
 
 - **Overview:** lead and task KPIs, latest activity, quick actions.
 - **Leads:** add and search customer travel requests.
-- **Task center:** generate lead-qualification and draft-offer tasks, inspect agent outputs, edit, approve, or reject.
-- **AI team:** view the current General Manager and Sales Crew structure.
+- **Task center:** create sales, finance, marketing, support, and complaint tasks; inspect outputs, edit, approve, or reject.
+- **AI team:** view department managers and specialist agents across Sales, Finance, Marketing, Customer Success, and Reporting.
 - **Reports:** weekly lead and task activity.
 - **Settings:** prototype connection and agency context.
 
@@ -68,6 +68,14 @@ No local Docker Desktop or Python installation is required; run these commands i
 - Retrieve agent status and a seven-day activity summary.
 - Generate deterministic mock outputs without API keys.
 - Keep draft offers unpriced and mark supplier availability as unverified.
+
+## Initial Phase 3 department workflows
+
+- Finance: prepare a cost worksheet and an internal invoice shell. Supplier costs, totals, taxes, selling prices, and amounts due remain empty until verified source data and financial review are supplied.
+- Marketing: draft Arabic and English travel content using recorded lead facts; no publishing, unverified discounts, supplier claims, or availability statements.
+- Customer Success: draft internal customer replies and classify complaint notes for human review; no customer messages are sent.
+- Reporting: the weekly reporting endpoint summarizes recorded leads and task statuses; it does not invent external performance data.
+- Every department task requires owner approval. All added agents currently use deterministic mock logic, not a connected LLM.
 
 ## Dependencies
 

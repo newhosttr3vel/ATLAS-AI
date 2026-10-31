@@ -178,6 +178,20 @@ TEXT = {
         "not_recorded": "غير مسجل",
         "no_critical_gaps": "لا توجد بيانات أساسية ناقصة.",
         "no_recommended_gaps": "البيانات الإضافية مكتملة.",
+        "prepare_cost_sheet": "إعداد ورقة تكاليف",
+        "draft_invoice": "إعداد مسودة فاتورة",
+        "draft_marketing_content": "إنشاء محتوى تسويقي",
+        "draft_customer_reply": "صياغة رد للعميل",
+        "classify_complaint": "تصنيف شكوى",
+        "finance": "المالية",
+        "marketing": "التسويق",
+        "customer_success": "خدمة العملاء",
+        "reporting": "التقارير",
+        "copy_ar": "المحتوى العربي",
+        "copy_en": "المحتوى الإنجليزي",
+        "costing_inputs": "بيانات التكلفة المطلوبة",
+        "missing_before_issuance": "متطلبات استكمال الفاتورة",
+        "recommended_steps": "خطوات المعالجة المقترحة",
     },
     "en": {
         "nav": "WORKSPACE",
@@ -280,6 +294,20 @@ TEXT = {
         "availability": "Availability",
         "not_verified": "Not verified",
         "not_provided": "Not provided",
+        "prepare_cost_sheet": "Prepare cost worksheet",
+        "draft_invoice": "Draft invoice",
+        "draft_marketing_content": "Draft marketing content",
+        "draft_customer_reply": "Draft customer reply",
+        "classify_complaint": "Classify complaint",
+        "finance": "Finance",
+        "marketing": "Marketing",
+        "customer_success": "Customer Success",
+        "reporting": "Reporting",
+        "copy_ar": "Arabic copy",
+        "copy_en": "English copy",
+        "costing_inputs": "Required costing inputs",
+        "missing_before_issuance": "Required before invoice issuance",
+        "recommended_steps": "Recommended handling steps",
         "data_completeness": "Data completeness",
         "qualification": "Qualification decision",
         "ready_for_offer": "Ready for an initial offer draft",
@@ -512,7 +540,15 @@ def render_tasks(agency_id: str) -> None:
                 chosen_lead = st.selectbox(t("select_lead"), list(lead_map.keys()))
                 task_type = st.selectbox(
                     t("task_type"),
-                    ["qualify_lead", "build_offer"],
+                    [
+                        "qualify_lead",
+                        "build_offer",
+                        "prepare_cost_sheet",
+                        "draft_invoice",
+                        "draft_marketing_content",
+                        "draft_customer_reply",
+                        "classify_complaint",
+                    ],
                     format_func=lambda value: t(value),
                 )
                 instructions = st.text_area(t("instructions"), height=80)
@@ -630,6 +666,45 @@ def render_tasks(agency_id: str) -> None:
                 if result.get("packages"):
                     st.warning(t("offer_warning"))
                     st.dataframe(pd.DataFrame(result["packages"]), use_container_width=True, hide_index=True)
+
+                if result.get("line_items"):
+                    st.markdown(f"**{t('costing_inputs')}**")
+                    st.dataframe(pd.DataFrame(result["line_items"]), use_container_width=True, hide_index=True)
+                    if result.get("customer_budget"):
+                        st.caption(
+                            f"{t('budget')}: {result['customer_budget']['amount']:,.2f} "
+                            f"{result['customer_budget']['currency']} — {result['customer_budget']['meaning']}"
+                        )
+                    st.caption("لم يتم حساب أي إجمالي لعدم توافر عروض الموردين." if st.session_state.language == "ar" else "No totals were calculated because supplier quotes are missing.")
+
+                for key in ("copy_ar", "copy_en", "reply_ar", "reply_en"):
+                    if result.get(key):
+                        label = t(key) if key in {"copy_ar", "copy_en"} else ("مسودة الرد بالعربية" if st.session_state.language == "ar" and key == "reply_ar" else "English reply draft" if key == "reply_en" else "مسودة الرد بالعربية")
+                        st.text_area(label, value=result[key], height=130, disabled=True, key=f"{key}_{task['id']}")
+
+                if result.get("missing_before_issuance"):
+                    st.warning(t("missing_before_issuance"))
+                    for item in result["missing_before_issuance"]:
+                        st.write("• " + str(item))
+
+                if result.get("required_inputs"):
+                    st.markdown(f"**{t('costing_inputs')}**")
+                    for item in result["required_inputs"]:
+                        st.write("• " + str(item))
+
+                if result.get("recommended_steps"):
+                    st.markdown(f"**{t('recommended_steps')}**")
+                    if result.get("priority"):
+                        st.metric(
+                            "الأولوية" if st.session_state.language == "ar" else "Priority",
+                            result["priority"],
+                        )
+                    for item in result["recommended_steps"]:
+                        st.write("• " + str(item))
+
+                if result.get("fact_check"):
+                    st.caption(" | ".join(str(item) for item in result["fact_check"]))
+
                 with st.popover(t("result")):
                     st.json(result)
             else:
@@ -702,42 +777,43 @@ def render_team(agency_id: str) -> None:
         st.info(t("no_data"))
         return
 
-    management = next((agent for agent in agents if agent["agent_id"] == "general_manager"), None)
-    sales = next((agent for agent in agents if agent["agent_id"] == "sales_crew"), None)
-    specialist = [agent for agent in agents if agent["agent_id"] not in {"general_manager", "sales_crew"}]
-
-    if management:
+    general_manager = next((item for item in agents if item["agent_id"] == "general_manager"), None)
+    if general_manager:
         st.markdown(
             f"""
             <div class="org-card org-top">
-              <div class="org-avatar">✦</div><div><strong>{management['name']}</strong>
-              <small>{management['role']}</small></div><span class="org-tag">LEAD</span>
+              <div class="org-avatar">✦</div><div><strong>{general_manager['name']}</strong>
+              <small>{general_manager['role']}</small></div><span class="org-tag">LEAD</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    if sales:
-        st.markdown(
-            f"""
-            <div class="org-connector"></div>
-            <div class="org-card org-middle">
-              <div class="org-avatar">◈</div><div><strong>{sales['name']}</strong>
-              <small>{sales['role']}</small></div><span class="org-tag">SALES</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    if specialist:
+
+    department_order = ["Sales", "Finance", "Marketing", "Customer Success", "Reporting"]
+    department_labels = {
+        "Sales": t("sales") if "sales" in TEXT[st.session_state.language] else "Sales",
+        "Finance": t("finance"),
+        "Marketing": t("marketing"),
+        "Customer Success": t("customer_success"),
+        "Reporting": t("reporting"),
+    }
+    for department in department_order:
+        members = [item for item in agents if item.get("department") == department]
+        if not members:
+            continue
         st.markdown("<div class='org-connector'></div>", unsafe_allow_html=True)
-        cols = st.columns(len(specialist))
-        for col, agent in zip(cols, specialist):
-            with col:
+        st.markdown(f"### {department_labels[department]}")
+        cols = st.columns(2)
+        for index, agent in enumerate(members):
+            with cols[index % 2]:
+                is_manager = agent.get("is_manager", False)
                 st.markdown(
                     f"""
-                    <div class="org-card org-specialist">
-                      <div class="org-avatar">✧</div><strong>{agent['name']}</strong>
+                    <div class="org-card" style="min-height:112px;margin-bottom:12px;">
+                      <div class="org-avatar">{"◈" if is_manager else "✧"}</div>
+                      <div><strong>{agent['name']}</strong>
                       <small>{agent['role']}</small>
-                      <div class="agent-meta">{agent.get('assigned_tasks_count',0)} {t('total_tasks')}</div>
+                      <div class="agent-meta">{agent.get('assigned_tasks_count',0)} {t('total_tasks')}</div></div>
                     </div>
                     """,
                     unsafe_allow_html=True,

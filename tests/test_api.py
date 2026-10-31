@@ -142,6 +142,111 @@ def test_owner_can_approve_or_reject_pending_tasks(client: TestClient) -> None:
     assert rejected.json()["status"] == "rejected"
 
 
+
+def test_department_agents_route_finance_and_keep_amounts_unconfirmed(client: TestClient) -> None:
+    lead = client.post(
+        "/api/leads",
+        json={
+            "customer_name": "Finance Demo",
+            "destination": "Makkah",
+            "travelers": 2,
+            "budget_amount": 18000,
+            "currency_code": "EGP",
+        },
+    ).json()
+
+    costing = client.post(
+        "/api/tasks",
+        json={"task_type": "prepare_cost_sheet", "lead_id": lead["id"]},
+    )
+    assert costing.status_code == 201
+    cost_task = costing.json()
+    assert cost_task["assigned_agent_id"] == "costing_agent"
+    cost_result = cost_task["result"]["result"]
+    assert cost_result["total_cost"] is None
+    assert cost_result["selling_price"] is None
+    assert cost_result["customer_budget"]["amount"] == 18000
+    assert cost_task["status"] == "pending_approval"
+    assert cost_task["requires_owner_approval"] is True
+
+    invoice = client.post(
+        "/api/tasks",
+        json={"task_type": "draft_invoice", "lead_id": lead["id"]},
+    )
+    assert invoice.status_code == 201
+    invoice_result = invoice.json()["result"]["result"]
+    assert invoice.json()["assigned_agent_id"] == "invoice_agent"
+    assert invoice_result["total_due"] is None
+    assert invoice_result["document_status"] == "draft_shell_only"
+
+
+def test_marketing_and_support_agents_only_create_reviewable_drafts(client: TestClient) -> None:
+    lead = client.post(
+        "/api/leads",
+        json={"customer_name": "Content Demo", "destination": "Makkah", "travelers": 3},
+    ).json()
+
+    marketing = client.post(
+        "/api/tasks",
+        json={"task_type": "draft_marketing_content", "lead_id": lead["id"]},
+    )
+    assert marketing.status_code == 201
+    marketing_body = marketing.json()
+    assert marketing_body["assigned_agent_id"] == "marketing_content_agent"
+    assert "Makkah" in marketing_body["result"]["result"]["copy_en"]
+    assert marketing_body["result"]["result"]["content_status"] == "draft_for_review"
+    assert marketing_body["status"] == "pending_approval"
+
+    support = client.post(
+        "/api/tasks",
+        json={"task_type": "draft_customer_reply", "lead_id": lead["id"]},
+    )
+    assert support.status_code == 201
+    support_result = support.json()["result"]["result"]
+    assert support.json()["assigned_agent_id"] == "support_agent"
+    assert support_result["send_status"] == "not_sent"
+    assert support.json()["requires_owner_approval"] is True
+
+
+def test_complaint_handler_flags_urgent_cases_for_human_review(client: TestClient) -> None:
+    lead = client.post(
+        "/api/leads",
+        json={"customer_name": "Complaint Demo", "destination": "Jeddah"},
+    ).json()
+    task = client.post(
+        "/api/tasks",
+        json={
+            "task_type": "classify_complaint",
+            "lead_id": lead["id"],
+            "instructions": "العميل عالق في المطار اليوم بسبب مشكلة في الحجز",
+        },
+    )
+    assert task.status_code == 201
+    body = task.json()
+    result = body["result"]["result"]
+    assert body["assigned_agent_id"] == "complaint_handler"
+    assert result["priority"] == "urgent_review"
+    assert result["category"] in {"multiple", "booking"}
+    assert result["customer_contacted"] is False
+    assert body["status"] == "pending_approval"
+
+
+def test_agent_directory_lists_all_departments(client: TestClient) -> None:
+    agents = client.get("/api/agents").json()
+    agent_ids = {item["agent_id"] for item in agents}
+    assert {
+        "finance_manager",
+        "costing_agent",
+        "invoice_agent",
+        "marketing_manager",
+        "marketing_content_agent",
+        "customer_success_manager",
+        "support_agent",
+        "complaint_handler",
+        "reporting_manager",
+        "report_writer",
+    }.issubset(agent_ids)
+
 def test_offer_builder_never_invents_prices_or_availability(client: TestClient) -> None:
     lead = client.post(
         "/api/leads",
