@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import get_db
 from backend.main import app
-from backend.models import Base
+from backend.models import Agency, Base
 
 
 @pytest.fixture
@@ -24,6 +24,18 @@ def client():
         autocommit=False,
     )
     Base.metadata.create_all(bind=test_engine)
+    with TestingSessionLocal() as setup_db:
+        setup_db.add(
+            Agency(
+                id="demo-agency",
+                name="ATLAS AI Demo Agency",
+                slug="demo-agency",
+                plan="prototype",
+                default_currency="EGP",
+                timezone="Africa/Cairo",
+            )
+        )
+        setup_db.commit()
 
     def override_get_db():
         db = TestingSessionLocal()

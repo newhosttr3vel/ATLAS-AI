@@ -346,6 +346,88 @@ def test_weekly_report_is_scoped_to_the_selected_agency(client: TestClient) -> N
     assert all(value == 0 for value in report["department_task_counts"].values())
 
 
+
+def test_workspace_registry_and_audit_events_are_agency_scoped(client: TestClient) -> None:
+    workspace = client.get("/api/workspace")
+    assert workspace.status_code == 200
+    assert workspace.json()["agency_id"] == "demo-agency"
+    assert workspace.json()["plan"] == "prototype"
+    assert workspace.json()["authentication_enabled"] is False
+    assert workspace.json()["tenant_security"] == "prototype_header_only"
+
+    lead = client.post("/api/leads", json={"customer_name": "Audit Demo"})
+    assert lead.status_code == 201
+    audit = client.get("/api/audit")
+    assert audit.status_code == 200
+    assert any(
+        event["action"] == "lead.created" and event["entity_id"] == lead.json()["id"]
+        for event in audit.json()
+    )
+    other_audit = client.get("/api/audit", headers={"X-Agency-ID": "agency-b"})
+    assert other_audit.status_code == 200
+    assert other_audit.json() == []
+
+
+def test_weekly_report_writer_creates_reviewable_narrative_task(client: TestClient) -> None:
+    lead = client.post(
+        "/api/leads",
+        json={
+            "customer_name": "Weekly Report Demo",
+            "destination": "Makkah",
+            "travelers": 2,
+            "phone": "01012345678",
+        },
+    ).json()
+    client.post("/api/tasks", json={"task_type": "qualify_lead", "lead_id": lead["id"]})
+
+    generated = client.post(
+        "/api/reports/weekly/generate",
+        json={"instructions": "ركز على المهام التي تنتظر اعتماد المالك."},
+    )
+    assert generated.status_code == 201
+    task = generated.json()
+    assert task["task_type"] == "generate_weekly_report"
+    assert task["lead_id"] is None
+    assert task["assigned_agent_id"] == "report_writer"
+    assert task["status"] == "pending_approval"
+    assert task["requires_owner_approval"] is True
+
+    result = task["result"]["result"]
+    assert result["report_type"] == "weekly_operations"
+    assert result["report_status"] == "draft_for_owner_review"
+    assert "1 عميل" in result["executive_summary_ar"]
+    assert result["task_status"]["pending_approval"] == 1
+    assert result["limitations_ar"]
+    assert "revenue" not in result
+    assert task["result"]["confidence_calibrated"] is False
+
+    filtered = client.get("/api/tasks?task_type=generate_weekly_report")
+    assert filtered.status_code == 200
+    assert len(filtered.json()) == 1
+    assert filtered.json()[0]["id"] == task["id"]
+    assert any(event["action"] == "report.generated" for event in client.get("/api/audit").json())
+
+    approved = client.post(
+        f"/api/tasks/{task['id']}/approve",
+        json={"notes": "تمت مراجعة التقرير التجريبي."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+
+
+def test_weekly_report_writer_uses_only_selected_agency_records(client: TestClient) -> None:
+    client.post("/api/leads", json={"customer_name": "Demo Tenant Lead"})
+    generated = client.post(
+        "/api/reports/weekly/generate",
+        json={},
+        headers={"X-Agency-ID": "agency-b"},
+    )
+    assert generated.status_code == 201
+    result = generated.json()["result"]["result"]
+    assert result["lead_pipeline"] == {"new": 0, "needs_information": 0, "qualified": 0}
+    assert result["task_status"]["pending_approval"] == 0
+
+
 def test_task_lookup_and_missing_lead(client: TestClient) -> None:
     missing = client.post(
         "/api/tasks",

@@ -13,8 +13,8 @@ ATLAS AI is a cloud-first prototype for travel-agency operations. The system use
 | 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented |
 | 3 | Initial Finance, Marketing, Customer Success workflows and expanded approval policies | Implemented (initial workflows) |
 | 4 | Bilingual Streamlit Control Center, guided task workflows and operational reports | Implemented (enhanced prototype) |
-| 5 | Bilingual static landing page and interactive mock demo | Planned |
-| 6 | Expanded tests, security hardening and production deployment guidance | Planned |
+| 5 | Weekly narrative report writer, agency registry metadata and audit foundation | Implemented (prototype groundwork) |
+| 6 | Bilingual public demo, authentication/RBAC, SaaS hardening and deployment guidance | Planned |
 
 ## Human-facing Control Center
 
@@ -40,7 +40,7 @@ Open forwarded port **8501** from the Codespaces **Ports** panel. The applicatio
 - **Leads:** add and search customer travel requests.
 - **Task center:** create sales, finance, marketing, support, and complaint tasks; inspect outputs, edit, approve, or reject.
 - **AI team:** view department managers and specialist agents across Sales, Finance, Marketing, Customer Success, and Reporting.
-- **Reports:** seven-day lead pipeline, task status, task-type and department activity, approval rate, average task processing time, and CSV export.
+- **Reports:** seven-day lead pipeline, task status, task-type and department activity, approval rate, average task processing time, CSV export, and an owner-reviewable narrative report.
 - **Settings:** prototype connection and agency context.
 
 The dashboard connects to FastAPI through `ATLAS_API_URL` (default: `http://127.0.0.1:8000`) and sends `X-Agency-ID` with each request.
@@ -76,6 +76,14 @@ No local Docker Desktop or Python installation is required; run these commands i
 - Customer Success: draft internal customer replies and classify complaint notes for human review; no customer messages are sent.
 - Reporting: the weekly reporting endpoint summarizes recorded leads and task statuses; it does not invent external performance data.
 - Every department task requires owner approval. All added agents currently use deterministic mock logic, not a connected LLM.
+
+## Reporting and SaaS groundwork
+
+- The Report Writer creates a seven-day narrative from the selected agency's stored lead and task metrics. Every generated report is a task awaiting owner approval.
+- Workspace registry metadata stores an agency name, slug, status, prototype plan, default currency, and timezone.
+- Operational events for lead creation, task creation, edits, approvals, rejections, and report generation are recorded in an agency-scoped audit table.
+- The agency ID header still selects a prototype workspace only. It is not authentication, membership, or authorization. Do not expose this prototype API to real customers or sensitive production data.
+- The registry and audit log are groundwork only. Secure SaaS onboarding, user accounts, agency memberships, role-based permissions, signed sessions, tenant-bound authentication, and production database migrations remain in the next security phase.
 
 ## Dependencies
 

@@ -10,8 +10,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.agents.general_manager import GeneralManagerAgent
-from backend.database import engine, get_db
-from backend.models import Base, Lead, Task
+from backend.agents.report_writer import ReportWriterAgent
+from backend.database import SessionLocal, engine, get_db
+from backend.models import Agency, AuditLog, Base, Lead, Task
 from backend.schemas import (
     LeadCreate,
     LeadRead,
@@ -20,23 +21,39 @@ from backend.schemas import (
     TaskEdit,
     TaskRead,
     TaskReject,
+    ReportGenerate,
 )
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    # Preserve the existing demo workspace after upgrading the database schema.
+    with SessionLocal() as db:
+        if db.get(Agency, "demo-agency") is None:
+            db.add(
+                Agency(
+                    id="demo-agency",
+                    name="ATLAS AI Demo Agency",
+                    slug="demo-agency",
+                    plan="prototype",
+                    default_currency="EGP",
+                    timezone="Africa/Cairo",
+                )
+            )
+            db.commit()
     yield
 
 
 app = FastAPI(
     title="ATLAS AI API",
     description="Cloud-first API for a travel-agency multi-agent platform.",
-    version="0.3.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
 general_manager = GeneralManagerAgent()
+report_writer = ReportWriterAgent()
 STANDARD_RESULT_KEYS = {
     "result",
     "confidence",
@@ -69,6 +86,28 @@ def _get_task(db: Session, task_id: str, agency_id: str) -> Task:
     return task
 
 
+def _write_audit(
+    db: Session,
+    *,
+    agency_id: str,
+    action: str,
+    entity_type: str,
+    entity_id: str | None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Store a minimal event. Actor identity is a placeholder until authentication exists."""
+    db.add(
+        AuditLog(
+            agency_id=agency_id,
+            actor_id="prototype-owner",
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details or {},
+        )
+    )
+
+
 @app.get("/", tags=["system"])
 def root() -> dict[str, str]:
     return {
@@ -99,6 +138,15 @@ def create_lead(
 
     lead = Lead(agency_id=agency_id, **payload.model_dump())
     db.add(lead)
+    db.flush()
+    _write_audit(
+        db,
+        agency_id=agency_id,
+        action="lead.created",
+        entity_type="lead",
+        entity_id=lead.id,
+        details={"destination": lead.destination},
+    )
     db.commit()
     db.refresh(lead)
     return lead
@@ -169,6 +217,15 @@ def create_task(
         lead.status = qualification
 
     db.add(task)
+    db.flush()
+    _write_audit(
+        db,
+        agency_id=agency_id,
+        action="task.created",
+        entity_type="task",
+        entity_id=task.id,
+        details={"task_type": task.task_type, "assigned_agent_id": task.assigned_agent_id},
+    )
     db.commit()
     db.refresh(task)
     return task
@@ -179,6 +236,7 @@ def list_tasks(
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
     task_status: str | None = Query(default=None, alias="status"),
+    task_type: str | None = Query(default=None),
     lead_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
 ) -> list[Task]:
@@ -187,6 +245,8 @@ def list_tasks(
         statement = statement.where(Task.status == task_status)
     if lead_id:
         statement = statement.where(Task.lead_id == lead_id)
+    if task_type:
+        statement = statement.where(Task.task_type == task_type)
     statement = statement.order_by(Task.created_at.desc()).limit(limit)
     return list(db.scalars(statement).all())
 
@@ -212,6 +272,7 @@ def approve_task(
         raise HTTPException(status_code=409, detail="Only pending tasks can be approved.")
     task.status = "approved"
     task.owner_decision_notes = payload.notes
+    _write_audit(db, agency_id=agency_id, action="task.approved", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
     db.commit()
     db.refresh(task)
     return task
@@ -229,6 +290,7 @@ def reject_task(
         raise HTTPException(status_code=409, detail="Only pending tasks can be rejected.")
     task.status = "rejected"
     task.owner_decision_notes = payload.reason
+    _write_audit(db, agency_id=agency_id, action="task.rejected", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
     db.commit()
     db.refresh(task)
     return task
@@ -256,9 +318,59 @@ def edit_task(
     task.confidence = float(payload.result["confidence"])
     task.owner_decision_notes = payload.notes
     task.status = "pending_approval"
+    _write_audit(db, agency_id=agency_id, action="task.edited", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
     db.commit()
     db.refresh(task)
     return task
+
+
+@app.get("/api/workspace", tags=["workspace"])
+def get_workspace(
+    db: Session = Depends(get_db),
+    agency_id: str = Depends(_agency_id),
+) -> dict[str, Any]:
+    agency = db.get(Agency, agency_id)
+    if agency is None:
+        raise HTTPException(status_code=404, detail="Agency workspace is not registered.")
+    return {
+        "agency_id": agency.id,
+        "name": agency.name,
+        "slug": agency.slug,
+        "status": agency.status,
+        "plan": agency.plan,
+        "default_currency": agency.default_currency,
+        "timezone": agency.timezone,
+        "created_at": agency.created_at.isoformat(),
+        "tenant_security": "prototype_header_only",
+        "authentication_enabled": False,
+    }
+
+
+@app.get("/api/audit", tags=["audit"])
+def list_audit_events(
+    db: Session = Depends(get_db),
+    agency_id: str = Depends(_agency_id),
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[dict[str, Any]]:
+    events = db.scalars(
+        select(AuditLog)
+        .where(AuditLog.agency_id == agency_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "id": event.id,
+            "agency_id": event.agency_id,
+            "actor_id": event.actor_id,
+            "action": event.action,
+            "entity_type": event.entity_type,
+            "entity_id": event.entity_id,
+            "details": event.details,
+            "created_at": event.created_at.isoformat(),
+        }
+        for event in events
+    ]
 
 
 @app.get("/api/agents", tags=["agents"])
@@ -397,3 +509,48 @@ def weekly_report(
         "mode": "mock",
         "note": "Prototype metrics calculated only from recorded tasks and leads for the selected agency.",
     }
+
+
+@app.post("/api/reports/weekly/generate", response_model=TaskRead, status_code=status.HTTP_201_CREATED, tags=["reports"])
+def generate_weekly_report(
+    payload: ReportGenerate,
+    db: Session = Depends(get_db),
+    agency_id: str = Depends(_agency_id),
+) -> Task:
+    """Create a reviewable narrative draft from recorded agency metrics only."""
+    snapshot = weekly_report(db, agency_id)
+    started = perf_counter()
+    agent_response = report_writer.run(snapshot, payload.instructions)
+    duration_ms = round((perf_counter() - started) * 1000)
+    period_label = str(snapshot.get("period_end", ""))[:10]
+    task = Task(
+        agency_id=agency_id,
+        lead_id=None,
+        task_type="generate_weekly_report",
+        title=f"التقرير التشغيلي الأسبوعي · {period_label}",
+        assigned_agent_id=report_writer.agent_id,
+        status="pending_approval",
+        input_data={
+            "mode": "rule_based_mock",
+            "period_start": snapshot.get("period_start"),
+            "period_end": snapshot.get("period_end"),
+            "instructions": payload.instructions,
+        },
+        result=agent_response,
+        confidence=0.0,
+        requires_owner_approval=True,
+        duration_ms=duration_ms,
+    )
+    db.add(task)
+    db.flush()
+    _write_audit(
+        db,
+        agency_id=agency_id,
+        action="report.generated",
+        entity_type="task",
+        entity_id=task.id,
+        details={"report_type": "weekly_operations", "period_end": period_label},
+    )
+    db.commit()
+    db.refresh(task)
+    return task

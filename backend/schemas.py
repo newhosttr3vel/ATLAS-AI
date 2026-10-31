@@ -53,6 +53,10 @@ class TaskCreate(BaseModel):
     instructions: str | None = Field(default=None, max_length=3000)
 
 
+class ReportGenerate(BaseModel):
+    instructions: str | None = Field(default=None, max_length=2000)
+
+
 class TaskApprove(BaseModel):
     notes: str | None = Field(default=None, max_length=2000)
 

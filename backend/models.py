@@ -15,6 +15,37 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class Agency(Base):
+    """Tenant registry metadata; not an authentication boundary."""
+
+    __tablename__ = "agencies"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="active")
+    plan: Mapped[str] = mapped_column(String(32), nullable=False, default="prototype")
+    default_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="EGP")
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Africa/Cairo")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+
+class AuditLog(Base):
+    """Append-only prototype event record scoped to an agency."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    agency_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(80), nullable=False, default="prototype-owner")
+    action: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    entity_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, index=True)
+
+
 class Lead(Base):
     __tablename__ = "leads"
 

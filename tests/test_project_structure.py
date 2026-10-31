@@ -17,6 +17,7 @@ def test_required_phase_two_and_dashboard_files_exist() -> None:
         "backend/models.py",
         "backend/schemas.py",
         "backend/agents/general_manager.py",
+        "backend/agents/report_writer.py",
         "backend/agents/lead_qualifier.py",
         "backend/agents/offer_builder.py",
         "backend/agents/department_agents.py",

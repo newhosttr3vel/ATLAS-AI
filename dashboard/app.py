@@ -178,6 +178,25 @@ TEXT = {
         "not_recorded": "غير مسجل",
         "no_critical_gaps": "لا توجد بيانات أساسية ناقصة.",
         "no_recommended_gaps": "البيانات الإضافية مكتملة.",
+        "generate_report": "إنشاء التقرير الأسبوعي الذكي",
+        "report_generated": "تم إنشاء مسودة التقرير وأصبحت بانتظار مراجعتك.",
+        "report_summary": "الملخص التنفيذي",
+        "report_highlights": "أهم المؤشرات",
+        "report_actions": "التوصيات والخطوات التالية",
+        "report_limitations": "حدود التقرير",
+        "report_status": "حالة التقرير",
+        "workspace_profile": "ملف الوكالة",
+        "workspace_plan": "الخطة الحالية",
+        "workspace_currency": "العملة الافتراضية",
+        "workspace_timezone": "المنطقة الزمنية",
+        "audit_history": "سجل النشاط والتغييرات",
+        "audit_action": "الإجراء",
+        "audit_entity": "العنصر",
+        "audit_actor": "المنفذ",
+        "audit_time": "التاريخ",
+        "prototype_security_warning": "بيئة تجريبية: معرّف الوكالة ليس تسجيل دخول ولا يوفر صلاحيات أو عزلًا أمنيًا إنتاجيًا.",
+        "no_reports_yet": "لم يتم إنشاء تقرير سردي بعد.",
+
         "sales": "المبيعات",
         "decided_tasks": "المهام التي تم البت فيها",
         "approval_rate": "نسبة الاعتماد",
@@ -350,6 +369,25 @@ TEXT = {
         "not_recorded": "Not recorded",
         "no_critical_gaps": "No essential information is missing.",
         "no_recommended_gaps": "Recommended details are complete.",
+        "generate_report": "Generate weekly management report",
+        "report_generated": "Report draft created and is awaiting your review.",
+        "report_summary": "Executive summary",
+        "report_highlights": "Key highlights",
+        "report_actions": "Recommendations and next steps",
+        "report_limitations": "Report limitations",
+        "report_status": "Report status",
+        "workspace_profile": "Agency workspace",
+        "workspace_plan": "Current plan",
+        "workspace_currency": "Default currency",
+        "workspace_timezone": "Timezone",
+        "audit_history": "Activity and change log",
+        "audit_action": "Action",
+        "audit_entity": "Record",
+        "audit_actor": "Actor",
+        "audit_time": "Date",
+        "prototype_security_warning": "Prototype environment: agency ID is not a login and does not provide production-grade authorization or tenant security.",
+        "no_reports_yet": "No narrative report has been generated yet.",
+
         "sales": "Sales",
         "decided_tasks": "Tasks with a decision",
         "approval_rate": "Approval rate",
@@ -881,9 +919,125 @@ def render_team(agency_id: str) -> None:
 
 def render_reports(agency_id: str) -> None:
     header(t("heading_reports"), t("sub_reports"))
+
+    action_col, hint_col = st.columns([0.36, 0.64])
+    with action_col:
+        generate_clicked = st.button(
+            "✦  " + t("generate_report"),
+            type="primary",
+            use_container_width=True,
+        )
+    with hint_col:
+        st.caption(t("prototype_security_warning"))
+
+    if generate_clicked:
+        try:
+            api_request(
+                "POST",
+                "/api/reports/weekly/generate",
+                agency_id=agency_id,
+                payload={"instructions": None},
+            )
+            st.success(t("report_generated"))
+            st.rerun()
+        except APIError as exc:
+            show_error(str(exc))
+
     report = api_get("/api/reports/weekly", agency_id, {})
     if not report:
         return
+
+    generated_reports = api_get(
+        "/api/tasks?task_type=generate_weekly_report&limit=20",
+        agency_id,
+        [],
+    )
+    if generated_reports:
+        latest_report = generated_reports[0]
+        response = latest_report.get("result") or {}
+        narrative = response.get("result") or {}
+        summary = (
+            narrative.get("executive_summary_ar")
+            if st.session_state.language == "ar"
+            else narrative.get("executive_summary_en")
+        )
+        with st.container(border=True):
+            st.markdown(f"### {t('report_summary')}")
+            st.write(summary or t("no_reports_yet"))
+
+            highlights = (
+                narrative.get("highlights_ar", [])
+                if st.session_state.language == "ar"
+                else narrative.get("highlights_en", [])
+            )
+            if highlights:
+                st.markdown(f"**{t('report_highlights')}**")
+                for item in highlights:
+                    st.write("• " + str(item))
+
+            actions = (
+                narrative.get("recommended_actions_ar", [])
+                if st.session_state.language == "ar"
+                else narrative.get("recommended_actions_en", [])
+            )
+            if actions:
+                st.markdown(f"**{t('report_actions')}**")
+                for item in actions:
+                    st.write("• " + str(item))
+
+            limitations = (
+                narrative.get("limitations_ar", [])
+                if st.session_state.language == "ar"
+                else narrative.get("limitations_en", [])
+            )
+            with st.expander(t("report_limitations")):
+                for item in limitations:
+                    st.write("• " + str(item))
+
+            status_col, date_col = st.columns(2)
+            status_col.metric(t("report_status"), status_text(latest_report.get("status", "")))
+            date_col.caption(str(latest_report.get("created_at", ""))[:19])
+
+            if latest_report.get("status") == "pending_approval":
+                notes = st.text_input(t("decision_notes"), key=f"report_notes_{latest_report['id']}")
+                approve_col, reject_col = st.columns(2)
+                with approve_col:
+                    if st.button(
+                        t("approve"),
+                        type="primary",
+                        key=f"approve_report_{latest_report['id']}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            api_request(
+                                "POST",
+                                f"/api/tasks/{latest_report['id']}/approve",
+                                agency_id=agency_id,
+                                payload={"notes": notes or None},
+                            )
+                            st.success(t("approve_success"))
+                            st.rerun()
+                        except APIError as exc:
+                            show_error(str(exc))
+                with reject_col:
+                    if st.button(
+                        t("reject"),
+                        key=f"reject_report_{latest_report['id']}",
+                        use_container_width=True,
+                    ):
+                        try:
+                            api_request(
+                                "POST",
+                                f"/api/tasks/{latest_report['id']}/reject",
+                                agency_id=agency_id,
+                                payload={"reason": notes or "Rejected by owner"},
+                            )
+                            st.success(t("reject_success"))
+                            st.rerun()
+                        except APIError as exc:
+                            show_error(str(exc))
+    else:
+        st.info(t("no_reports_yet"))
 
     period_start = str(report.get("period_start", ""))[:10]
     period_end = str(report.get("period_end", ""))[:10]
@@ -893,9 +1047,9 @@ def render_reports(agency_id: str) -> None:
     lead_statuses = report.get("lead_status_counts", {})
     department_counts = report.get("department_task_counts", {})
     task_type_counts = report.get("task_type_counts", {})
-
     approval_rate = report.get("approval_rate_percent")
     average_duration = report.get("average_task_duration_ms")
+
     metric_cols = st.columns(4)
     metric_cols[0].metric(t("leads_week"), report.get("leads_created", 0))
     metric_cols[1].metric(t("tasks_week"), report.get("tasks_created", 0))
@@ -909,13 +1063,9 @@ def render_reports(agency_id: str) -> None:
         f"{average_duration:.0f} ms" if average_duration is not None else "—",
     )
 
-    st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
     lead_tab, task_tab, team_tab = st.tabs([
-        t("lead_pipeline"),
-        t("task_performance"),
-        t("department_activity"),
+        t("lead_pipeline"), t("task_performance"), t("department_activity")
     ])
-
     with lead_tab:
         lead_labels = {
             "new": t("new_leads"),
@@ -923,37 +1073,36 @@ def render_reports(agency_id: str) -> None:
             "qualified": t("qualified_leads"),
         }
         if any(lead_statuses.values()):
-            lead_frame = pd.DataFrame({
+            frame = pd.DataFrame({
                 "الحالة" if st.session_state.language == "ar" else "Status":
                     [lead_labels.get(key, key) for key in lead_statuses],
                 "العدد" if st.session_state.language == "ar" else "Count":
                     list(lead_statuses.values()),
             })
-            st.bar_chart(lead_frame.set_index(lead_frame.columns[0]))
+            st.bar_chart(frame.set_index(frame.columns[0]))
         else:
             st.info(t("no_data"))
 
     with task_tab:
         if any(statuses.values()):
-            status_frame = pd.DataFrame({
+            frame = pd.DataFrame({
                 "الحالة" if st.session_state.language == "ar" else "Status":
                     [status_text(key) for key in statuses],
                 "العدد" if st.session_state.language == "ar" else "Count":
                     list(statuses.values()),
             })
-            st.bar_chart(status_frame.set_index(status_frame.columns[0]))
+            st.bar_chart(frame.set_index(frame.columns[0]))
         else:
             st.info(t("no_tasks_period"))
-
         if task_type_counts:
-            task_type_frame = pd.DataFrame({
+            frame = pd.DataFrame({
                 "نوع المهمة" if st.session_state.language == "ar" else "Task type":
                     [t(key) for key in task_type_counts],
                 "العدد" if st.session_state.language == "ar" else "Count":
                     list(task_type_counts.values()),
             })
             st.markdown(f"### {t('task_mix')}")
-            st.bar_chart(task_type_frame.set_index(task_type_frame.columns[0]))
+            st.bar_chart(frame.set_index(frame.columns[0]))
 
     with team_tab:
         department_labels = {
@@ -964,14 +1113,14 @@ def render_reports(agency_id: str) -> None:
             "Reporting": t("reporting"),
         }
         if any(department_counts.values()):
-            dept_frame = pd.DataFrame({
+            frame = pd.DataFrame({
                 "القسم" if st.session_state.language == "ar" else "Department":
                     [department_labels.get(key, key) for key in department_counts],
                 "المهام" if st.session_state.language == "ar" else "Tasks":
                     list(department_counts.values()),
             })
-            st.bar_chart(dept_frame.set_index(dept_frame.columns[0]))
-            st.dataframe(dept_frame, use_container_width=True, hide_index=True)
+            st.bar_chart(frame.set_index(frame.columns[0]))
+            st.dataframe(frame, use_container_width=True, hide_index=True)
         else:
             st.info(t("no_tasks_period"))
 
@@ -989,7 +1138,6 @@ def render_reports(agency_id: str) -> None:
         data=csv_data,
         file_name=f"atlas-weekly-report-{period_end or 'summary'}.csv",
         mime="text/csv",
-        use_container_width=False,
     )
 
     with st.expander("تفاصيل التقرير" if st.session_state.language == "ar" else "Report details"):
@@ -1136,7 +1284,7 @@ def main() -> None:
             st.session_state.language = language_choice
             st.rerun()
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        st.caption("ATLAS AI · Prototype 0.3.0")
+        st.caption("ATLAS AI · Prototype 0.4.0")
         st.caption(t("not_auth"))
 
     agency_id = st.session_state.agency_id
@@ -1174,9 +1322,33 @@ def main() -> None:
     else:
         header(t("heading_settings"), t("sub_settings"))
         st.text_input(t("api_address"), value=API_URL, disabled=True)
-        st.text_input(t("agency"), value=agency_id, disabled=True)
+        workspace = api_get("/api/workspace", agency_id, {})
+        if workspace:
+            st.markdown(f"### {t('workspace_profile')}")
+            st.write(f"**{workspace.get('name', '—')}**")
+            w1, w2, w3 = st.columns(3)
+            w1.metric(t("workspace_plan"), workspace.get("plan", "—"))
+            w2.metric(t("workspace_currency"), workspace.get("default_currency", "—"))
+            w3.metric(t("workspace_timezone"), workspace.get("timezone", "—"))
+            st.caption(f"Agency ID: {workspace.get('agency_id', '—')} · Status: {workspace.get('status', '—')}")
+        st.warning(t("prototype_security_warning"))
         st.info(t("mock"))
-        st.warning(t("not_auth"))
+
+        audit = api_get("/api/audit?limit=50", agency_id, [])
+        st.markdown(f"### {t('audit_history')}")
+        if audit:
+            rows = [
+                {
+                    t("audit_action"): event.get("action"),
+                    t("audit_entity"): event.get("entity_type"),
+                    t("audit_actor"): event.get("actor_id"),
+                    t("audit_time"): str(event.get("created_at", ""))[:19],
+                }
+                for event in audit
+            ]
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        else:
+            st.info(t("no_data"))
 
 
 if __name__ == "__main__":
