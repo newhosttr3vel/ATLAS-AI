@@ -19,7 +19,7 @@
 
 - Python 3.11+
 - FastAPI for the API
-- CrewAI for the planned agent orchestration
+- CrewAI for planned agent orchestration (optional dependency, installed separately)
 - SQLite for the prototype database
 - Streamlit for the planned operations dashboard
 - Docker and Docker Compose inside GitHub Codespaces
@@ -42,7 +42,7 @@ ATLAS-AI/
 │   ├── tools/
 │   └── main.py
 ├── dashboard/
-├── docs/                  # Static GitHub Pages demo only
+├── docs/                    # Static GitHub Pages demo only
 ├── tests/
 ├── .dockerignore
 ├── .env.example
@@ -50,7 +50,8 @@ ATLAS-AI/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── LICENSE
-├── requirements.txt
+├── requirements.txt         # Core app dependencies
+├── requirements-agents.txt  # Optional CrewAI dependencies
 └── README.md
 ```
 
@@ -64,17 +65,28 @@ ATLAS-AI/
 4. Wait for the development container to finish building.
 5. Use the integrated terminal inside the browser.
 
-The Dev Container configuration provides Python 3.11 and Docker tooling through the Docker-in-Docker feature. It installs the Python dependencies, creates a local ignored `.env` file from `.env.example`, and forwards ports 8000 and 8501.
+The Dev Container configuration provides Python 3.11 and Docker tooling through the Docker-in-Docker feature. It installs the core Python dependencies and creates a local ignored `.env` file from `.env.example`.
 
 **You do not need to install Docker Desktop, Python, or a code editor on your computer.** A Docker Hub account is also not needed just to build and run this project's containers inside Codespaces.
 
-### 2. Run the foundation API
+### 2. Prepare the virtual environment
 
-The environment is prepared automatically. In the Codespaces terminal, run:
+In the Codespaces terminal, run:
 
 ```bash
-pytest -q
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+The core requirements intentionally do not install CrewAI. This keeps API development, the dashboard, and tests independent from optional vector-database and ONNX Runtime wheels. CrewAI is isolated in `requirements-agents.txt` and will be installed after the Codespaces platform compatibility is confirmed.
+
+### 3. Run tests and start the API
+
+```bash
+python -m pytest -q
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 Open the forwarded port **8000** from the Codespaces **Ports** panel:
@@ -82,9 +94,7 @@ Open the forwarded port **8000** from the Codespaces **Ports** panel:
 - Health check: `/health`
 - Interactive API documentation: `/docs`
 
-### 3. Run with Docker Compose in the cloud
-
-The Codespaces environment includes Docker and Compose. Run:
+### 4. Run with Docker Compose in the cloud
 
 ```bash
 docker compose up --build
@@ -98,17 +108,21 @@ docker compose down
 
 The API uses port 8000. SQLite files are stored under `data/`, which is intentionally excluded from Git.
 
+## Optional CrewAI installation
+
+Do not install the optional CrewAI requirements until the Codespaces Python version, CPU architecture, and supported package wheels have been checked. When compatibility is confirmed, install with:
+
+```bash
+python -m pip install -r requirements-agents.txt
+```
+
+The default prototype mode remains mock-driven and must not require a provider API key.
+
 ## GitHub Pages
 
 GitHub Pages is reserved for the public static demo. It cannot host the Python API, database, agent runtime, or Streamlit dashboard.
 
-To enable the deployment workflow:
-
-1. Open **Settings → Pages** in this repository.
-2. Set **Build and deployment → Source** to **GitHub Actions**.
-3. The `deploy-pages.yml` workflow will publish the `docs/` directory when relevant changes reach `main`.
-
-The current `docs/index.html` is only a branded placeholder. The interactive bilingual demo is planned for Phase 5.
+The repository workflow publishes the `docs/` directory when relevant changes reach `main`. The interactive bilingual demo is planned for Phase 5.
 
 ## Security and operating boundaries
 
@@ -147,25 +161,39 @@ The current `docs/index.html` is only a branded placeholder. The interactive bil
 3. انتظر تجهيز بيئة العمل السحابية.
 4. افتح Terminal من داخل المتصفح.
 
-بيئة Codespaces مجهزة لتوفير Python 3.11 وأدوات Docker وDocker Compose داخل البيئة السحابية، وتثبيت المكتبات تلقائيًا، وإنشاء ملف `.env` محلي غير مرفوع إلى GitHub.
+بيئة Codespaces مجهزة لتوفير Python 3.11 وأدوات Docker داخل البيئة السحابية. لا تحتاج إلى تثبيت Docker Desktop أو Python على جهازك.
 
-**مش محتاج تحمّل Docker Desktop أو Python أو أي برنامج على جهازك.** وحساب Docker مش مطلوب لتشغيل الحاويات داخل Codespaces.
+## تجهيز بيئة Python
 
-## تشغيل المشروع
-
-لتشغيل الاختبارات والـ API من Terminal داخل Codespaces:
+نفّذ الأوامر التالية داخل Terminal:
 
 ```bash
-pytest -q
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-بعدها افتح المنفذ **8000** من تبويب **Ports**:
+قسمنا المتطلبات إلى ملفين:
+
+- `requirements.txt`: المكتبات الأساسية لتشغيل الـ API والداشبورد والاختبارات.
+- `requirements-agents.txt`: مكتبات CrewAI الاختيارية، ولن نثبتها إلا بعد التأكد من توافق إصدار Python ومعمارية Codespaces مع حزم ONNX وLanceDB.
+
+الهدف من الفصل ده إن مشكلة مكتبة اختيارية ما توقفش تشغيل واختبار أساس المشروع.
+
+## تشغيل الاختبارات والـ API
+
+```bash
+python -m pytest -q
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+افتح المنفذ **8000** من تبويب **Ports**:
 
 - فحص حالة التطبيق: `/health`
 - توثيق الـ API: `/docs`
 
-لتشغيله باستخدام Docker:
+## تشغيل Docker
 
 ```bash
 docker compose up --build
@@ -177,13 +205,7 @@ docker compose up --build
 docker compose down
 ```
 
-## الفرق بين الأدوات
-
-- **GitHub:** حفظ الكود وإدارة الإصدارات والتعديلات.
-- **GitHub Codespaces:** بيئة التطوير والتشغيل السحابية التي نستخدمها من المتصفح.
-- **Docker:** تشغيل خدمات المشروع داخل Codespaces، وليس على جهازك.
-- **GitHub Pages:** عرض النسخة التجريبية الثابتة فقط من مجلد `docs/`.
-- **الاستضافة الإنتاجية:** خطوة مستقبلية منفصلة؛ Codespaces ليس سيرفرًا دائمًا.
+Docker هيشتغل داخل Codespaces، وليس على جهازك.
 
 ## قواعد الأمان
 
@@ -194,4 +216,4 @@ docker compose down
 
 ## مراحل التنفيذ
 
-سننفذ المشروع على مراحل مستقلة، ونراجع نتيجة كل مرحلة واختباراتها قبل الانتقال إلى التالية. المرحلة الحالية هي **Phase 1 — Foundation**، وبعد اعتمادها نبدأ Backend والوكلاء في Phase 2.
+سننفذ المشروع على مراحل مستقلة، ونراجع نتيجة كل مرحلة واختباراتها قبل الانتقال إلى التالية. المرحلة الحالية هي **Phase 1 — Foundation**.

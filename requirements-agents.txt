@@ -1,0 +1,4 @@
+# Optional AI agent orchestration dependencies.
+# Install only after confirming the Codespaces Python/platform has compatible wheels.
+-r requirements.txt
+crewai>=1.15,<2.0
