@@ -10,84 +10,71 @@ ATLAS AI is a cloud-first prototype for travel-agency operations. The system use
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Cloud-first repository, Codespaces, Docker, documentation, CI and Pages setup | Complete |
-| 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented; validating in CI |
+| 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented |
 | 3 | Finance, Marketing, Customer Success, Reporting and expanded approval policies | Planned |
-| 4 | Streamlit Control Center connected to the API | Planned |
+| 4 | Streamlit Control Center connected to the API | Implemented (initial functional UI) |
 | 5 | Bilingual static landing page and interactive mock demo | Planned |
 | 6 | Expanded tests, security hardening and production deployment guidance | Planned |
+
+## Human-facing Control Center
+
+The Streamlit dashboard is the normal interface for the prototype. Swagger at `/docs` is reserved for technical API inspection.
+
+Start the API in one Codespaces terminal:
+
+```bash
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Start the interface in a second terminal:
+
+```bash
+python -m streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port 8501
+```
+
+Open forwarded port **8501** from the Codespaces **Ports** panel. The application opens with an Arabic-first dashboard and an English language toggle.
+
+### Dashboard areas
+
+- **Overview:** lead and task KPIs, latest activity, quick actions.
+- **Leads:** add and search customer travel requests.
+- **Task center:** generate lead-qualification and draft-offer tasks, inspect agent outputs, edit, approve, or reject.
+- **AI team:** view the current General Manager and Sales Crew structure.
+- **Reports:** weekly lead and task activity.
+- **Settings:** prototype connection and agency context.
+
+The dashboard connects to FastAPI through `ATLAS_API_URL` (default: `http://127.0.0.1:8000`) and sends `X-Agency-ID` with each request.
+
+### Run both services with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+This starts FastAPI on port 8000 and the dashboard on port 8501. Stop with:
+
+```bash
+docker compose down
+```
+
+No local Docker Desktop or Python installation is required; run these commands inside Codespaces.
 
 ## Phase 2 capabilities
 
 - Persist travel leads in SQLite.
 - Create and retrieve lead-qualification and draft-offer tasks.
 - Route tasks through the General Manager to the Sales Crew.
-- Include lead qualifier and offer builder specialist agents.
 - Review, edit, approve, or reject pending owner-review tasks.
 - Retrieve agent status and a seven-day activity summary.
 - Generate deterministic mock outputs without API keys.
 - Keep draft offers unpriced and mark supplier availability as unverified.
 
-### Current API routes
-
-| Method | Route | Purpose |
-|---|---|---|
-| GET | `/` | API service information |
-| GET | `/health` | Health check |
-| POST | `/api/leads` | Create a lead |
-| GET | `/api/leads` | List agency leads |
-| POST | `/api/tasks` | Route a supported sales task |
-| GET | `/api/tasks` | List tasks |
-| GET | `/api/tasks/{task_id}` | Retrieve task detail |
-| POST | `/api/tasks/{task_id}/approve` | Approve a pending task |
-| POST | `/api/tasks/{task_id}/reject` | Reject a pending task |
-| POST | `/api/tasks/{task_id}/edit` | Edit a pending result without removing approval |
-| GET | `/api/agents` | List prototype agents and activity |
-| GET | `/api/reports/weekly` | Seven-day activity summary |
-
-## Develop in the browser with GitHub Codespaces
-
-1. Open [the repository](https://github.com/newhosttr3vel/ATLAS-AI).
-2. Select **Code → Codespaces → Create codespace on main**.
-3. Open the integrated terminal.
-4. Prepare the environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-5. Run the tests:
-
-```bash
-python -m pytest -q
-```
-
-6. Start the API:
-
-```bash
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Open port 8000 in the Codespaces **Ports** panel, then visit `/docs` to explore the API.
-
-### Run with Docker in Codespaces
-
-```bash
-docker compose up --build
-```
-
-Stop the containers with `docker compose down`.
-
-**No local Docker Desktop or Python installation is required.** Codespaces is a development environment, not permanent production hosting.
-
 ## Dependencies
 
-- `requirements.txt`: core API, Streamlit, SQLAlchemy and test dependencies.
+- `requirements.txt`: core API, Streamlit, SQLAlchemy, HTTP client and test dependencies.
 - `requirements-agents.txt`: optional CrewAI integration. Do not install it until the Codespaces platform has compatible ONNX Runtime and LanceDB wheels.
 
-The current Sales Crew intentionally uses deterministic mock agents. CrewAI orchestration is not imported by the running API yet, so the prototype works without provider credentials or heavyweight vector-store dependencies.
+The Sales Crew intentionally uses deterministic mock agents. CrewAI orchestration is not imported by the running API yet.
 
 ## Data and agency isolation
 
@@ -103,96 +90,60 @@ This is a prototype data-partitioning mechanism, **not authentication or a secur
 - No customer-facing messages or booking actions are sent.
 - Never commit `.env`, API keys, tokens, passwords, or real customer information.
 - GitHub Pages publishes only static files from `docs/`; it does not host this API or database.
+- Codespaces is a development environment, not permanent production hosting.
 
 ## Architecture
 
 - Python 3.11+
 - FastAPI
 - SQLAlchemy + SQLite
-- Pydantic v2
+- Streamlit Control Center
 - Deterministic Mock LLM adapter
 - General Manager + Sales Crew
-- Streamlit dashboard (planned)
-- CrewAI adapter (optional future integration)
+- Optional future CrewAI integration
 - GitHub Actions, GitHub Pages, Docker and Codespaces
 
 ---
 
 # العربية
 
-## فكرة ATLAS AI
+## التعامل مع النظام
 
-منصة لإدارة عمليات شركات السياحة عن طريق فريق من وكلاء الذكاء الاصطناعي. المدير العام يستقبل المهمة ويوجهها إلى القسم المناسب، والمالك يراجع النتائج ويعتمدها قبل أي إجراء حساس أو تواصل مع العميل.
+واجهة Streamlit هي الواجهة اليومية للتعامل مع ATLAS AI. صفحة Swagger مخصصة لفحص الـ API تقنيًا فقط.
 
-## ما تم تنفيذه في المرحلة الثانية
+لتشغيل النظام من Codespaces:
 
-- قاعدة بيانات SQLite لحفظ العملاء والمهام.
-- إضافة عميل جديد وعرض قائمة العملاء.
-- المدير العام يوجه مهام المبيعات إلى الوكلاء المتخصصين.
-- وكيل تأهيل العملاء يراجع اكتمال بيانات الرحلة ويحدد المعلومات الناقصة.
-- وكيل إعداد العروض ينشئ ثلاثة مستويات تخطيطية: اقتصادي ومتوازن ومميز.
-- مراجعة المهمة وتعديل نتيجتها أو اعتمادها أو رفضها.
-- عرض الوكلاء وحالة نشاطهم وملخص أسبوعي.
-- وضع Mock يعمل بدون API Keys أو خدمات مدفوعة.
-
-## تجربة الـ API
-
-بعد تشغيل السيرفر افتح:
-
-- `/docs` لتجربة الـ API.
-- `/health` لفحص التشغيل.
-- `/api/agents` لعرض الوكلاء.
-- `/api/reports/weekly` لملخص النشاط.
-
-### إنشاء عميل تجريبي
-
-أرسل POST إلى `/api/leads` بالبيانات التالية:
-
-```json
-{
-  "customer_name": "Demo Customer",
-  "destination": "Makkah",
-  "travel_start": "2027-01-10",
-  "travel_end": "2027-01-15",
-  "travelers": 3,
-  "budget_amount": 25000,
-  "currency_code": "EGP"
-}
-```
-
-### تشغيل مهمة تأهيل العميل
-
-استخدم قيمة `id` التي رجعت من إنشاء العميل في الطلب التالي إلى `/api/tasks`:
-
-```json
-{
-  "task_type": "qualify_lead",
-  "lead_id": "PASTE_LEAD_ID_HERE"
-}
-```
-
-يمكنك أيضًا استخدام `build_offer` لإعداد هيكل عرض مبدئي غير مسعّر.
-
-**مهم:** هذه عروض تجريبية لا تحتوي على أسعار فعلية أو تأكيد توافر. كل مهمة مبيعات تتطلب موافقة المالك، ولا يتم إرسال رسائل أو تنفيذ حجوزات.
-
-## تشغيل المشروع من Codespaces
+**Terminal الأول — الـ API:**
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m pytest -q
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-لتشغيل Docker من داخل Codespaces:
+**Terminal الثاني — واجهة المستخدم:**
+
+```bash
+python -m streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port 8501
+```
+
+بعدها افتح تبويب **Ports** واضغط رابط المنفذ **8501**. هتظهر لك واجهة عربية، مع إمكانية التحويل للإنجليزية.
+
+### أقسام الواجهة
+
+- **نظرة عامة:** مؤشرات العملاء والمهام وآخر نشاط.
+- **العملاء:** تسجيل طلبات السفر والبحث فيها.
+- **مركز المهام:** إرسال المهام للوكلاء ومراجعة النتائج وتعديلها واعتمادها أو رفضها.
+- **فريق الذكاء الاصطناعي:** عرض الهيكل الحالي للمدير العام وفريق المبيعات.
+- **التقارير:** ملخص نشاط آخر سبعة أيام.
+- **الإعدادات:** سياق الوكالة والاتصال التجريبي.
+
+يمكنك تشغيل الواجهة والـ API معًا باستخدام Docker Compose:
 
 ```bash
 docker compose up --build
 ```
 
-لا تحتاج إلى تثبيت Docker Desktop على جهازك.
+الواجهة على المنفذ 8501 والـ API على 8000.
 
-## تنبيه الأمان
+## حدود النسخة الحالية
 
-حقل `X-Agency-ID` لعزل بيانات الوكالات في النموذج الأولي فقط، وليس نظام تسجيل دخول أو حماية نهائي. قبل الاستخدام التجاري الحقيقي يجب إضافة تسجيل الدخول والصلاحيات والتدقيق وسلامة عزل بيانات كل وكالة.
+الوكلاء يعملون في وضع Mock. لا يوجد اتصال حقيقي بموردين أو أسعار أو توافر أو حجوزات. كل العروض غير مسعّرة، وكل المهام تنتظر اعتماد المالك. معرّف الوكالة الحالي للتجربة فقط وليس نظام صلاحيات إنتاجيًا.

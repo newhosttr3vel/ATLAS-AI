@@ -9,3 +9,17 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+
+  dashboard:
+    build: .
+    container_name: atlas-ai-dashboard
+    command: ["streamlit", "run", "dashboard/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    env_file:
+      - .env
+    environment:
+      ATLAS_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    restart: unless-stopped
