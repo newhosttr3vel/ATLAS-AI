@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_required_phase_two_files_exist() -> None:
+def test_required_phase_two_and_dashboard_files_exist() -> None:
     required = [
         "README.md",
         ".env.example",
@@ -21,6 +21,9 @@ def test_required_phase_two_files_exist() -> None:
         "backend/agents/offer_builder.py",
         "backend/crews/sales.py",
         "backend/services/mock_llm.py",
+        "dashboard/app.py",
+        "dashboard/README.md",
+        ".streamlit/config.toml",
         "docs/index.html",
         ".github/workflows/ci.yml",
         ".github/workflows/deploy-pages.yml",
