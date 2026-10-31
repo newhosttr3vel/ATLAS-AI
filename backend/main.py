@@ -13,6 +13,8 @@ from backend.agents.general_manager import GeneralManagerAgent
 from backend.agents.report_writer import ReportWriterAgent
 from backend.database import SessionLocal, engine, get_db
 from backend.models import Agency, AuditLog, Base, Lead, Task
+from backend.auth import router as auth_router, workspace_router
+from backend.security import RequestContext, get_request_context, require_roles, validate_auth_config
 from backend.schemas import (
     LeadCreate,
     LeadRead,
@@ -27,6 +29,7 @@ from backend.schemas import (
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    validate_auth_config()
     Base.metadata.create_all(bind=engine)
     # Preserve the existing demo workspace after upgrading the database schema.
     with SessionLocal() as db:
@@ -48,9 +51,12 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="ATLAS AI API",
     description="Cloud-first API for a travel-agency multi-agent platform.",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
+
+app.include_router(auth_router)
+app.include_router(workspace_router)
 
 general_manager = GeneralManagerAgent()
 report_writer = ReportWriterAgent()
@@ -64,12 +70,9 @@ STANDARD_RESULT_KEYS = {
 }
 
 
-def _agency_id(x_agency_id: str = Header(default="demo-agency", alias="X-Agency-ID")) -> str:
-    """Prototype tenant selector; this is not authentication or authorization."""
-    cleaned = x_agency_id.strip()
-    if not cleaned or len(cleaned) > 80:
-        raise HTTPException(status_code=400, detail="Invalid X-Agency-ID header.")
-    return cleaned
+def _agency_id(context: RequestContext = Depends(get_request_context)) -> str:
+    """Resolve the tenant from a verified membership, or a dev-only legacy selector."""
+    return context.agency_id
 
 
 def _get_lead(db: Session, lead_id: str, agency_id: str) -> Lead:
@@ -94,12 +97,13 @@ def _write_audit(
     entity_type: str,
     entity_id: str | None,
     details: dict[str, Any] | None = None,
+    actor_id: str = "prototype-owner",
 ) -> None:
-    """Store a minimal event. Actor identity is a placeholder until authentication exists."""
+    """Store a minimal event attributed to the signed-in user when available."""
     db.add(
         AuditLog(
             agency_id=agency_id,
-            actor_id="prototype-owner",
+            actor_id=actor_id,
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
@@ -132,6 +136,7 @@ def create_lead(
     payload: LeadCreate,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin", "manager", "agent")),
 ) -> Lead:
     if payload.travel_start and payload.travel_end and payload.travel_end < payload.travel_start:
         raise HTTPException(status_code=422, detail="travel_end must be on or after travel_start.")
@@ -146,6 +151,7 @@ def create_lead(
         entity_type="lead",
         entity_id=lead.id,
         details={"destination": lead.destination},
+        actor_id=context.user_id,
     )
     db.commit()
     db.refresh(lead)
@@ -172,6 +178,7 @@ def create_task(
     payload: TaskCreate,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin", "manager", "agent")),
 ) -> Task:
     lead = _get_lead(db, payload.lead_id, agency_id)
     started = perf_counter()
@@ -225,6 +232,7 @@ def create_task(
         entity_type="task",
         entity_id=task.id,
         details={"task_type": task.task_type, "assigned_agent_id": task.assigned_agent_id},
+        actor_id=context.user_id,
     )
     db.commit()
     db.refresh(task)
@@ -266,13 +274,14 @@ def approve_task(
     payload: TaskApprove,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin")),
 ) -> Task:
     task = _get_task(db, task_id, agency_id)
     if task.status != "pending_approval":
         raise HTTPException(status_code=409, detail="Only pending tasks can be approved.")
     task.status = "approved"
     task.owner_decision_notes = payload.notes
-    _write_audit(db, agency_id=agency_id, action="task.approved", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
+    _write_audit(db, agency_id=agency_id, action="task.approved", entity_type="task", entity_id=task.id, details={"task_type": task.task_type}, actor_id=context.user_id)
     db.commit()
     db.refresh(task)
     return task
@@ -284,13 +293,14 @@ def reject_task(
     payload: TaskReject,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin")),
 ) -> Task:
     task = _get_task(db, task_id, agency_id)
     if task.status != "pending_approval":
         raise HTTPException(status_code=409, detail="Only pending tasks can be rejected.")
     task.status = "rejected"
     task.owner_decision_notes = payload.reason
-    _write_audit(db, agency_id=agency_id, action="task.rejected", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
+    _write_audit(db, agency_id=agency_id, action="task.rejected", entity_type="task", entity_id=task.id, details={"task_type": task.task_type}, actor_id=context.user_id)
     db.commit()
     db.refresh(task)
     return task
@@ -302,6 +312,7 @@ def edit_task(
     payload: TaskEdit,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin")),
 ) -> Task:
     task = _get_task(db, task_id, agency_id)
     if task.status != "pending_approval":
@@ -318,7 +329,7 @@ def edit_task(
     task.confidence = float(payload.result["confidence"])
     task.owner_decision_notes = payload.notes
     task.status = "pending_approval"
-    _write_audit(db, agency_id=agency_id, action="task.edited", entity_type="task", entity_id=task.id, details={"task_type": task.task_type})
+    _write_audit(db, agency_id=agency_id, action="task.edited", entity_type="task", entity_id=task.id, details={"task_type": task.task_type}, actor_id=context.user_id)
     db.commit()
     db.refresh(task)
     return task
@@ -328,6 +339,7 @@ def edit_task(
 def get_workspace(
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(get_request_context),
 ) -> dict[str, Any]:
     agency = db.get(Agency, agency_id)
     if agency is None:
@@ -341,8 +353,9 @@ def get_workspace(
         "default_currency": agency.default_currency,
         "timezone": agency.timezone,
         "created_at": agency.created_at.isoformat(),
-        "tenant_security": "prototype_header_only",
-        "authentication_enabled": False,
+        "tenant_security": "signed_bearer_membership" if context.authenticated else "prototype_header_only",
+        "authentication_enabled": context.authenticated,
+        "current_role": context.role,
     }
 
 
@@ -516,6 +529,7 @@ def generate_weekly_report(
     payload: ReportGenerate,
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
+    context: RequestContext = Depends(require_roles("owner", "admin", "manager")),
 ) -> Task:
     """Create a reviewable narrative draft from recorded agency metrics only."""
     snapshot = weekly_report(db, agency_id)
@@ -550,6 +564,7 @@ def generate_weekly_report(
         entity_type="task",
         entity_id=task.id,
         details={"report_type": "weekly_operations", "period_end": period_label},
+        actor_id=context.user_id,
     )
     db.commit()
     db.refresh(task)

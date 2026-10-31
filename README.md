@@ -14,7 +14,7 @@ ATLAS AI is a cloud-first prototype for travel-agency operations. The system use
 | 3 | Initial Finance, Marketing, Customer Success workflows and expanded approval policies | Implemented (initial workflows) |
 | 4 | Bilingual Streamlit Control Center, guided task workflows and operational reports | Implemented (enhanced prototype) |
 | 5 | Weekly narrative report writer, agency registry metadata and audit foundation | Implemented (prototype groundwork) |
-| 6 | Bilingual public demo, authentication/RBAC, SaaS hardening and deployment guidance | Planned |
+| 6 | Agency registration, signed sessions, RBAC, team accounts and secure tenant binding | Implemented (security foundation) |
 
 ## Human-facing Control Center
 
@@ -43,7 +43,7 @@ Open forwarded port **8501** from the Codespaces **Ports** panel. The applicatio
 - **Reports:** seven-day lead pipeline, task status, task-type and department activity, approval rate, average task processing time, CSV export, and an owner-reviewable narrative report.
 - **Settings:** prototype connection and agency context.
 
-The dashboard connects to FastAPI through `ATLAS_API_URL` (default: `http://127.0.0.1:8000`) and sends `X-Agency-ID` with each request.
+The dashboard connects to FastAPI through `ATLAS_API_URL` (default: `http://127.0.0.1:8000`). Signed-in users send a bearer token bound to their agency membership; the old `X-Agency-ID` selector is available only in development mode.
 
 ### Run both services with Docker Compose
 
@@ -96,7 +96,7 @@ The Sales Crew intentionally uses deterministic mock agents. CrewAI orchestratio
 
 Lead and task records include an `agency_id`. Requests can select a demo agency with the `X-Agency-ID` header; if omitted, the API uses `demo-agency`.
 
-This is a prototype data-partitioning mechanism, **not authentication or a security boundary**. Before real customer use, implement authentication, role-based authorization, tenant isolation tests, audit logs, backups, and a production database.
+Production-mode requests now resolve their agency from a verified bearer session and active membership. Development retains the old header-only test path. Complete production deployment hardening and the remaining controls listed above before onboarding real customers.
 
 ## Operating and safety boundaries
 
@@ -162,4 +162,15 @@ docker compose up --build
 
 ## حدود النسخة الحالية
 
-الوكلاء يعملون في وضع Mock. لا يوجد اتصال حقيقي بموردين أو أسعار أو توافر أو حجوزات. كل العروض غير مسعّرة، وكل المهام تنتظر اعتماد المالك. معرّف الوكالة الحالي للتجربة فقط وليس نظام صلاحيات إنتاجيًا.
+الوكلاء يعملون في وضع Mock. لا يوجد اتصال حقيقي بموردين أو أسعار أو توافر أو حجوزات. كل العروض غير مسعّرة، وكل المهام تنتظر اعتماد المالك. في وضع الإنتاج يتم ربط الطلب بجلسة دخول موقعة وعضوية نشطة، أما وضع التطوير فيحتفظ بمسار التجربة القديم.
+
+
+## Authentication setup
+
+For production, set `APP_ENV=production` and configure `ATLAS_AUTH_SECRET` with a unique cryptographically random value of at least 32 characters. Never commit the secret. Example generation inside Codespaces:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Copy the generated value into the Codespaces secret/environment configuration for the API and dashboard. Do not use the development fallback secret in production. The Streamlit screen supports agency registration and sign-in; the development-only demo path is hidden in production.

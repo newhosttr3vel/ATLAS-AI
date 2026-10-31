@@ -443,3 +443,150 @@ def test_task_lookup_and_missing_lead(client: TestClient) -> None:
     fetched = client.get(f"/api/tasks/{task['id']}")
     assert fetched.status_code == 200
     assert fetched.json()["id"] == task["id"]
+
+
+def _register_agency(client: TestClient, slug: str = "alpha-travel", email: str = "owner@example.com") -> dict:
+    response = client.post("/api/auth/register-agency", json={
+        "agency_name": "Alpha Travel",
+        "agency_slug": slug,
+        "email": email,
+        "full_name": "Agency Owner",
+        "password": "Strong-passphrase-2026",
+        "default_currency": "EGP",
+        "timezone": "Africa/Cairo",
+    })
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_agency_registration_login_and_tenant_bound_session(client: TestClient) -> None:
+    registered = _register_agency(client)
+    token = registered["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    me = client.get("/api/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["role"] == "owner"
+    assert me.json()["agency"]["slug"] == "alpha-travel"
+
+    workspace = client.get("/api/workspace", headers=headers)
+    assert workspace.status_code == 200
+    assert workspace.json()["authentication_enabled"] is True
+    assert workspace.json()["tenant_security"] == "signed_bearer_membership"
+
+    mismatch = client.get("/api/leads", headers=headers | {"X-Agency-ID": "demo-agency"})
+    assert mismatch.status_code == 403
+
+    lead = client.post("/api/leads", headers=headers, json={"customer_name": "Authenticated Customer"})
+    assert lead.status_code == 201
+    assert lead.json()["agency_id"] == registered["agency"]["id"]
+    audit = client.get("/api/audit", headers=headers).json()
+    created_event = next(event for event in audit if event["action"] == "lead.created")
+    assert created_event["actor_id"] == registered["user"]["id"]
+
+    logged_in = client.post("/api/auth/login", json={
+        "agency_slug": "alpha-travel",
+        "email": "OWNER@example.com",
+        "password": "Strong-passphrase-2026",
+    })
+    assert logged_in.status_code == 200
+    assert logged_in.json()["user"]["id"] == registered["user"]["id"]
+
+
+def test_role_permissions_for_viewers_and_member_management(client: TestClient) -> None:
+    owner = _register_agency(client, "roles-travel", "roles-owner@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+
+    created = client.post("/api/workspace/members", headers=owner_headers, json={
+        "email": "viewer@example.com",
+        "full_name": "Read Only User",
+        "password": "Viewer-passphrase-2026",
+        "role": "viewer",
+    })
+    assert created.status_code == 201
+    members = client.get("/api/workspace/members", headers=owner_headers)
+    assert members.status_code == 200
+    assert any(item["role"] == "viewer" for item in members.json())
+
+    viewer_login = client.post("/api/auth/login", json={
+        "agency_slug": "roles-travel",
+        "email": "viewer@example.com",
+        "password": "Viewer-passphrase-2026",
+    })
+    assert viewer_login.status_code == 200
+    viewer_headers = {"Authorization": f"Bearer {viewer_login.json()['access_token']}"}
+
+    assert client.get("/api/leads", headers=viewer_headers).status_code == 200
+    denied_lead = client.post("/api/leads", headers=viewer_headers, json={"customer_name": "Should Be Blocked"})
+    assert denied_lead.status_code == 403
+    assert client.get("/api/workspace/members", headers=viewer_headers).status_code == 403
+    assert client.post("/api/workspace/members", headers=viewer_headers, json={
+        "email": "another@example.com", "full_name": "Another", "password": "Another-passphrase-2026"
+    }).status_code == 403
+
+
+def test_password_change_revokes_existing_sessions(client: TestClient) -> None:
+    owner = _register_agency(client, "password-travel", "password-owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    changed = client.post("/api/auth/change-password", headers=headers, json={
+        "current_password": "Strong-passphrase-2026",
+        "new_password": "Brand-new-passphrase-2026",
+    })
+    assert changed.status_code == 200
+    assert client.get("/api/auth/me", headers=headers).status_code == 401
+
+    login = client.post("/api/auth/login", json={
+        "agency_slug": "password-travel",
+        "email": "password-owner@example.com",
+        "password": "Brand-new-passphrase-2026",
+    })
+    assert login.status_code == 200
+
+
+def test_production_requires_signed_authentication(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("ATLAS_AUTH_SECRET", "test-only-secret-with-more-than-32-characters")
+    assert client.get("/api/leads").status_code == 401
+    assert client.get("/api/leads", headers={"X-Agency-ID": "demo-agency"}).status_code == 401
+    owner = _register_agency(client, "production-travel", "production-owner@example.com")
+    headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    assert client.get("/api/leads", headers=headers).status_code == 200
+
+
+def test_invalid_bearer_does_not_fall_back_to_demo_header(client: TestClient) -> None:
+    response = client.get("/api/leads", headers={
+        "Authorization": "Bearer forged.token.value",
+        "X-Agency-ID": "demo-agency",
+    })
+    assert response.status_code == 401
+
+
+def test_owner_can_deactivate_member_and_revoke_membership_session(client: TestClient) -> None:
+    owner = _register_agency(client, "member-admin-travel", "member-owner@example.com")
+    owner_headers = {"Authorization": f"Bearer {owner['access_token']}"}
+    created = client.post("/api/workspace/members", headers=owner_headers, json={
+        "email": "staff@example.com", "full_name": "Travel Staff",
+        "password": "Staff-passphrase-2026", "role": "agent",
+    })
+    assert created.status_code == 201
+    staff = client.post("/api/auth/login", json={
+        "agency_slug": "member-admin-travel", "email": "staff@example.com",
+        "password": "Staff-passphrase-2026",
+    }).json()
+    staff_headers = {"Authorization": f"Bearer {staff['access_token']}"}
+
+    deactivated = client.patch(
+        f"/api/workspace/members/{created.json()['user_id']}",
+        headers=owner_headers,
+        json={"is_active": False},
+    )
+    assert deactivated.status_code == 200
+    assert deactivated.json()["is_active"] is False
+    assert client.get("/api/auth/me", headers=staff_headers).status_code == 401
+
+    owner_member = client.patch(
+        f"/api/workspace/members/{owner['user']['id']}",
+        headers=owner_headers,
+        json={"is_active": False},
+    )
+    assert owner_member.status_code == 409

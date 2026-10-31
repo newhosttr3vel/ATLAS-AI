@@ -34,7 +34,12 @@ def api_request(
     agency_id: str,
     payload: dict[str, Any] | None = None,
 ) -> Any:
-    headers = {"X-Agency-ID": agency_id, "Accept": "application/json"}
+    headers = {"Accept": "application/json"}
+    access_token = st.session_state.get("access_token")
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+    else:
+        headers["X-Agency-ID"] = agency_id
     try:
         response = requests.request(
             method,
@@ -60,6 +65,74 @@ def api_request(
     if not response.content:
         return None
     return response.json()
+
+
+def render_auth_screen() -> None:
+    """Login and agency onboarding screen; demo bypass exists only in development."""
+    is_ar = st.session_state.language == "ar"
+    st.markdown(
+        "<div class='brand-lockup'><div class='brand-symbol'>✦</div>"
+        "<div><div class='brand-name'>ATLAS AI</div><div class='brand-sub'>TRAVEL OPERATIONS OS</div></div></div>",
+        unsafe_allow_html=True,
+    )
+    st.title("تسجيل الدخول إلى ATLAS AI" if is_ar else "Sign in to ATLAS AI")
+    st.caption("ادخل إلى مساحة وكالتك أو أنشئ مساحة جديدة." if is_ar else "Access your agency workspace or register a new one.")
+    mode = st.radio(
+        "العملية" if is_ar else "Account",
+        ["login", "register"],
+        format_func=lambda value: ("تسجيل الدخول" if is_ar else "Sign in") if value == "login"
+        else ("إنشاء وكالة جديدة" if is_ar else "Create an agency"),
+        horizontal=True,
+    )
+    with st.form("atlas_auth_form", clear_on_submit=False):
+        if mode == "login":
+            agency_slug = st.text_input("معرّف الوكالة / Agency slug")
+            email = st.text_input("البريد الإلكتروني / Email")
+            password = st.text_input("كلمة المرور / Password", type="password")
+            submitted = st.form_submit_button("دخول" if is_ar else "Sign in", use_container_width=True)
+            payload = {"agency_slug": agency_slug.strip().lower(), "email": email.strip().lower(), "password": password}
+            path = "/api/auth/login"
+        else:
+            agency_name = st.text_input("اسم الوكالة / Agency name")
+            agency_slug = st.text_input("رابط الوكالة / Agency slug", help="حروف إنجليزية صغيرة وأرقام وشرطة فقط" if is_ar else "Lowercase letters, numbers and hyphens only")
+            full_name = st.text_input("اسم المالك / Owner name")
+            email = st.text_input("البريد الإلكتروني / Email")
+            password = st.text_input("كلمة مرور (12 حرفًا على الأقل) / Password (12+ characters)", type="password")
+            currency = st.selectbox("العملة الافتراضية / Default currency", ["EGP", "SAR", "USD", "AED", "KWD"])
+            submitted = st.form_submit_button("إنشاء مساحة العمل" if is_ar else "Create workspace", use_container_width=True)
+            payload = {
+                "agency_name": agency_name.strip(), "agency_slug": agency_slug.strip().lower(),
+                "full_name": full_name.strip(), "email": email.strip().lower(),
+                "password": password, "default_currency": currency, "timezone": "Africa/Cairo",
+            }
+            path = "/api/auth/register-agency"
+    if submitted:
+        try:
+            response = requests.post(f"{API_URL}{path}", json=payload, timeout=REQUEST_TIMEOUT)
+            if not response.ok:
+                try:
+                    detail = response.json().get("detail", response.text)
+                except ValueError:
+                    detail = response.text
+                st.error(f"{response.status_code}: {detail}")
+            else:
+                result = response.json()
+                st.session_state.access_token = result["access_token"]
+                st.session_state.agency_id = result["agency"]["id"]
+                st.session_state.agency_name = result["agency"]["name"]
+                st.session_state.user_email = result["user"]["email"]
+                st.session_state.user_role = result["role"]
+                st.session_state.legacy_mode = False
+                st.success("تم تسجيل الدخول بنجاح." if is_ar else "Signed in successfully.")
+                st.rerun()
+        except requests.RequestException as exc:
+            st.error("تعذر الاتصال بخدمة API على المنفذ 8000." if is_ar else f"Cannot reach the API: {exc}")
+    if os.getenv("APP_ENV", "development").lower() != "production":
+        st.divider()
+        if st.button("الدخول إلى مساحة التجربة القديمة" if is_ar else "Continue with the legacy demo workspace"):
+            st.session_state.legacy_mode = True
+            st.session_state.agency_id = "demo-agency"
+            st.rerun()
 
 
 TEXT = {
@@ -1232,6 +1305,22 @@ def main() -> None:
         st.session_state.page = "overview"
     if "agency_id" not in st.session_state:
         st.session_state.agency_id = "demo-agency"
+    if "legacy_mode" not in st.session_state:
+        st.session_state.legacy_mode = False
+
+    if not st.session_state.get("access_token") and not st.session_state.legacy_mode:
+        render_auth_screen()
+        return
+
+    if st.session_state.get("access_token"):
+        try:
+            api_request("GET", "/api/auth/me", agency_id=st.session_state.agency_id)
+        except APIError:
+            st.session_state.access_token = None
+            st.session_state.legacy_mode = False
+            st.warning("انتهت جلسة الدخول. سجل الدخول مرة أخرى." if st.session_state.language == "ar" else "Your session expired. Please sign in again.")
+            render_auth_screen()
+            return
 
     with st.sidebar:
         st.markdown(
@@ -1266,12 +1355,22 @@ def main() -> None:
         )
         st.session_state.page = chosen
         st.markdown("---")
-        st.markdown(f"<div class='sidebar-caption'>{t('agency')}</div>", unsafe_allow_html=True)
-        st.session_state.agency_id = st.text_input(
-            t("agency"),
-            value=st.session_state.agency_id,
-            label_visibility="collapsed",
-        ).strip() or "demo-agency"
+        if st.session_state.get("access_token"):
+            st.caption(st.session_state.get("agency_name", "ATLAS AI"))
+            st.caption(st.session_state.get("user_email", ""))
+            st.caption("الدور: " + st.session_state.get("user_role", "—"))
+            if st.button("تسجيل الخروج" if st.session_state.language == "ar" else "Sign out", use_container_width=True):
+                for key in ["access_token", "agency_name", "user_email", "user_role"]:
+                    st.session_state.pop(key, None)
+                st.session_state.legacy_mode = False
+                st.rerun()
+        else:
+            st.markdown(f"<div class='sidebar-caption'>{t('agency')}</div>", unsafe_allow_html=True)
+            st.session_state.agency_id = st.text_input(
+                t("agency"),
+                value=st.session_state.agency_id,
+                label_visibility="collapsed",
+            ).strip() or "demo-agency"
         st.markdown(f"<div class='sidebar-caption'>{t('language')}</div>", unsafe_allow_html=True)
         language_choice = st.selectbox(
             t("language"),
@@ -1284,8 +1383,9 @@ def main() -> None:
             st.session_state.language = language_choice
             st.rerun()
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        st.caption("ATLAS AI · Prototype 0.4.0")
-        st.caption(t("not_auth"))
+        st.caption("ATLAS AI · Control Center 0.5.0")
+        if not st.session_state.get("access_token"):
+            st.caption(t("not_auth"))
 
     agency_id = st.session_state.agency_id
     try:
@@ -1331,7 +1431,90 @@ def main() -> None:
             w2.metric(t("workspace_currency"), workspace.get("default_currency", "—"))
             w3.metric(t("workspace_timezone"), workspace.get("timezone", "—"))
             st.caption(f"Agency ID: {workspace.get('agency_id', '—')} · Status: {workspace.get('status', '—')}")
-        st.warning(t("prototype_security_warning"))
+        if st.session_state.get("access_token") and st.session_state.get("user_role") in {"owner", "admin"}:
+            is_ar = st.session_state.language == "ar"
+            st.markdown("### إدارة أعضاء الوكالة" if is_ar else "### Agency members")
+            members = api_get("/api/workspace/members", agency_id, [])
+            if members:
+                st.dataframe(
+                    pd.DataFrame([{
+                        "الاسم" if is_ar else "Name": item["full_name"],
+                        "البريد" if is_ar else "Email": item["email"],
+                        "الدور" if is_ar else "Role": item["role"],
+                        "الحالة" if is_ar else "Status": ("نشط" if item["is_active"] else "معطّل") if is_ar else ("Active" if item["is_active"] else "Disabled"),
+                    } for item in members]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info("لا يوجد أعضاء بعد." if is_ar else "No members yet.")
+
+            allowed_roles = ["manager", "agent", "viewer"]
+            if st.session_state.get("user_role") == "owner":
+                allowed_roles = ["admin"] + allowed_roles
+            role_labels = {
+                "admin": "مدير وكالة" if is_ar else "Administrator",
+                "manager": "مدير" if is_ar else "Manager",
+                "agent": "موظف" if is_ar else "Agent",
+                "viewer": "مشاهد فقط" if is_ar else "Read only",
+            }
+            with st.expander("＋ إضافة عضو جديد" if is_ar else "＋ Add a team member"):
+                with st.form("create_workspace_member", clear_on_submit=True):
+                    member_name = st.text_input("الاسم الكامل" if is_ar else "Full name")
+                    member_email = st.text_input("البريد الإلكتروني" if is_ar else "Email")
+                    member_password = st.text_input("كلمة مرور مؤقتة (12 حرفًا على الأقل)" if is_ar else "Initial password (12+ characters)", type="password")
+                    member_role = st.selectbox("الصلاحية" if is_ar else "Role", allowed_roles, format_func=lambda value: role_labels[value])
+                    add_member = st.form_submit_button("إضافة العضو" if is_ar else "Create member", use_container_width=True)
+                if add_member:
+                    try:
+                        api_request("POST", "/api/workspace/members", agency_id=agency_id, payload={
+                            "full_name": member_name.strip(), "email": member_email.strip().lower(),
+                            "password": member_password, "role": member_role,
+                        })
+                        st.success("تم إنشاء العضوية. شارك كلمة المرور معه بطريقة آمنة." if is_ar else "Member created. Share the initial password securely.")
+                        st.rerun()
+                    except APIError as exc:
+                        st.error(str(exc))
+
+            manageable = [item for item in members if item["role"] != "owner"]
+            if manageable:
+                with st.expander("تعديل صلاحيات عضو أو تعطيله" if is_ar else "Change a member role or disable access"):
+                    member_ids = [item["user_id"] for item in manageable]
+                    selected_id = st.selectbox(
+                        "العضو" if is_ar else "Member",
+                        member_ids,
+                        format_func=lambda value: next(
+                            f"{item['full_name']} · {item['role']}" for item in manageable if item["user_id"] == value
+                        ),
+                    )
+                    selected_member = next(item for item in manageable if item["user_id"] == selected_id)
+                    update_roles = ["manager", "agent", "viewer"]
+                    if st.session_state.get("user_role") == "owner":
+                        update_roles = ["admin"] + update_roles
+                    if selected_member["role"] in update_roles:
+                        role_index = update_roles.index(selected_member["role"])
+                    else:
+                        role_index = 0
+                    updated_role = st.selectbox(
+                        "الدور الجديد" if is_ar else "New role",
+                        update_roles,
+                        index=role_index,
+                        format_func=lambda value: role_labels[value],
+                    )
+                    member_active = st.checkbox("العضوية نشطة" if is_ar else "Membership active", value=selected_member["is_active"])
+                    save_member = st.button("حفظ الصلاحيات" if is_ar else "Save member access")
+                    if save_member:
+                        try:
+                            api_request("PATCH", f"/api/workspace/members/{selected_id}", agency_id=agency_id,
+                                        payload={"role": updated_role, "is_active": member_active})
+                            st.success("تم تحديث العضوية. قد يحتاج العضو لتسجيل الدخول مجددًا." if is_ar else "Membership updated. The member may need to sign in again.")
+                            st.rerun()
+                        except APIError as exc:
+                            st.error(str(exc))
+        if not st.session_state.get("access_token"):
+            st.warning(t("prototype_security_warning"))
+        else:
+            st.success("جلسة موثقة — " + st.session_state.get("user_role", ""))
         st.info(t("mock"))
 
         audit = api_get("/api/audit?limit=50", agency_id, [])

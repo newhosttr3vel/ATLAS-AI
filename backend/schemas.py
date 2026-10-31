@@ -88,3 +88,67 @@ class TaskRead(BaseModel):
     duration_ms: int
     created_at: datetime
     updated_at: datetime
+
+
+class AgencyRegistration(BaseModel):
+    agency_name: str = Field(min_length=2, max_length=180)
+    agency_slug: str = Field(min_length=3, max_length=60, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    email: str = Field(min_length=5, max_length=254)
+    full_name: str = Field(min_length=2, max_length=160)
+    password: str = Field(min_length=12, max_length=128)
+    default_currency: str = Field(default="EGP", min_length=3, max_length=3)
+    timezone: str = Field(default="Africa/Cairo", min_length=3, max_length=64)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if "@" not in value or value.startswith("@") or value.endswith("@"):
+            raise ValueError("A valid email address is required.")
+        return value
+
+    @field_validator("default_currency")
+    @classmethod
+    def normalize_default_currency(cls, value: str) -> str:
+        return value.upper()
+
+
+class AuthLogin(BaseModel):
+    agency_slug: str = Field(min_length=3, max_length=60)
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_login_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("agency_slug")
+    @classmethod
+    def normalize_slug(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class MemberCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    full_name: str = Field(min_length=2, max_length=160)
+    password: str = Field(min_length=12, max_length=128)
+    role: Literal["admin", "manager", "agent", "viewer"] = "agent"
+
+    @field_validator("email")
+    @classmethod
+    def normalize_member_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if "@" not in value or value.startswith("@") or value.endswith("@"):
+            raise ValueError("A valid email address is required.")
+        return value
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
+class MemberUpdate(BaseModel):
+    role: Literal["admin", "manager", "agent", "viewer"] | None = None
+    is_active: bool | None = None
