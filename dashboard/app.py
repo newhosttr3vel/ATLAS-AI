@@ -599,6 +599,8 @@ def render_tasks(agency_id: str) -> None:
             c1.metric(t("assigned_to"), task.get("assigned_agent_id", "—"))
             if task.get("task_type") == "qualify_lead" and isinstance(result, dict) and "completeness_score" in result:
                 c2.metric(t("data_completeness"), f"{result.get('completeness_score', 0)}%")
+            elif response.get("confidence_calibrated") is False:
+                c2.metric(t("confidence"), "—")
             else:
                 c2.metric(t("confidence"), f"{task.get('confidence', 0):.0%}")
             c3.metric(t("status"), status_text(task_status))
