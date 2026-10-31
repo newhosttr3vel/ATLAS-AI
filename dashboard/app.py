@@ -178,6 +178,33 @@ TEXT = {
         "not_recorded": "غير مسجل",
         "no_critical_gaps": "لا توجد بيانات أساسية ناقصة.",
         "no_recommended_gaps": "البيانات الإضافية مكتملة.",
+        "sales": "المبيعات",
+        "decided_tasks": "المهام التي تم البت فيها",
+        "approval_rate": "نسبة الاعتماد",
+        "avg_duration": "متوسط زمن التنفيذ",
+        "lead_pipeline": "مسار العملاء",
+        "task_performance": "أداء المهام",
+        "department_activity": "نشاط الأقسام",
+        "task_mix": "توزيع أنواع المهام",
+        "report_period": "الفترة المغطاة",
+        "export_report": "تصدير ملخص التقرير",
+        "no_decisions": "لا توجد قرارات اعتماد أو رفض خلال الفترة.",
+        "no_tasks_period": "لا توجد مهام مسجلة خلال الفترة.",
+        "new_leads": "عملاء جدد",
+        "info_leads": "يحتاجون معلومات",
+        "qualified_leads": "عملاء مؤهلون",
+        "quick_qualification": "تأهيل عميل",
+        "quick_offer": "إعداد عرض",
+        "quick_marketing": "محتوى تسويقي",
+        "tasks_help_title": "اختصارات العمل",
+        "qualify_lead_help": "مراجعة اكتمال بيانات العميل وتحديد الأسئلة الناقصة.",
+        "build_offer_help": "إعداد هيكل عرض مبدئي دون أسعار أو توافر غير مؤكد.",
+        "prepare_cost_sheet_help": "تجهيز ورقة تكاليف فارغة لحين إدخال عروض الموردين الفعلية.",
+        "draft_invoice_help": "تجهيز هيكل فاتورة داخلي دون رقم رسمي أو مبلغ مستحق.",
+        "draft_marketing_content_help": "كتابة مسودة محتوى عربي وإنجليزي من البيانات المسجلة فقط.",
+        "draft_customer_reply_help": "صياغة رد داخلي مقترح؛ لن يتم إرساله للعميل.",
+        "classify_complaint_help": "تصنيف أولي للشكوى وتحديد ما يحتاج مراجعة بشرية.",
+
         "prepare_cost_sheet": "إعداد ورقة تكاليف",
         "draft_invoice": "إعداد مسودة فاتورة",
         "draft_marketing_content": "إنشاء محتوى تسويقي",
@@ -323,6 +350,33 @@ TEXT = {
         "not_recorded": "Not recorded",
         "no_critical_gaps": "No essential information is missing.",
         "no_recommended_gaps": "Recommended details are complete.",
+        "sales": "Sales",
+        "decided_tasks": "Tasks with a decision",
+        "approval_rate": "Approval rate",
+        "avg_duration": "Average processing time",
+        "lead_pipeline": "Lead pipeline",
+        "task_performance": "Task performance",
+        "department_activity": "Department activity",
+        "task_mix": "Task type mix",
+        "report_period": "Reporting period",
+        "export_report": "Export report summary",
+        "no_decisions": "No approval or rejection decisions during this period.",
+        "no_tasks_period": "No tasks recorded during this period.",
+        "new_leads": "New leads",
+        "info_leads": "Need information",
+        "qualified_leads": "Qualified",
+        "quick_qualification": "Qualify a lead",
+        "quick_offer": "Build an offer",
+        "quick_marketing": "Draft marketing content",
+        "tasks_help_title": "Task guide",
+        "qualify_lead_help": "Check lead completeness and identify missing follow-up questions.",
+        "build_offer_help": "Create an initial offer structure without unverified prices or availability.",
+        "prepare_cost_sheet_help": "Prepare an empty costing worksheet until real supplier quotes are entered.",
+        "draft_invoice_help": "Prepare an internal invoice shell without an official number or amount due.",
+        "draft_marketing_content_help": "Draft Arabic and English content using recorded facts only.",
+        "draft_customer_reply_help": "Prepare an internal reply draft; nothing will be sent to the customer.",
+        "classify_complaint_help": "Create a preliminary complaint classification for human review.",
+
     },
 }
 
@@ -551,6 +605,7 @@ def render_tasks(agency_id: str) -> None:
                     ],
                     format_func=lambda value: t(value),
                 )
+                st.caption(t(f"{task_type}_help"))
                 instructions = st.text_area(t("instructions"), height=80)
                 submit = st.form_submit_button(t("submit_task"), type="primary", use_container_width=True)
                 if submit:
@@ -793,7 +848,7 @@ def render_team(agency_id: str) -> None:
 
     department_order = ["Sales", "Finance", "Marketing", "Customer Success", "Reporting"]
     department_labels = {
-        "Sales": t("sales") if "sales" in TEXT[st.session_state.language] else "Sales",
+        "Sales": t("sales"),
         "Finance": t("finance"),
         "Marketing": t("marketing"),
         "Customer Success": t("customer_success"),
@@ -829,19 +884,113 @@ def render_reports(agency_id: str) -> None:
     report = api_get("/api/reports/weekly", agency_id, {})
     if not report:
         return
-    c1, c2, c3 = st.columns(3)
-    c1.metric(t("leads_week"), report.get("leads_created", 0))
-    c2.metric(t("tasks_week"), report.get("tasks_created", 0))
-    c3.metric(t("pending"), report.get("task_status_counts", {}).get("pending_approval", 0))
+
+    period_start = str(report.get("period_start", ""))[:10]
+    period_end = str(report.get("period_end", ""))[:10]
+    st.caption(f"{t('report_period')}: {period_start} — {period_end}")
 
     statuses = report.get("task_status_counts", {})
-    if any(statuses.values()):
-        labels = [status_text(key) for key in statuses]
-        chart = pd.DataFrame({"الحالة" if st.session_state.language == "ar" else "Status": labels, "العدد" if st.session_state.language == "ar" else "Count": list(statuses.values())})
-        st.markdown(f"### {t('activity')}")
-        st.bar_chart(chart.set_index(chart.columns[0]))
-    else:
-        st.info(t("no_data"))
+    lead_statuses = report.get("lead_status_counts", {})
+    department_counts = report.get("department_task_counts", {})
+    task_type_counts = report.get("task_type_counts", {})
+
+    approval_rate = report.get("approval_rate_percent")
+    average_duration = report.get("average_task_duration_ms")
+    metric_cols = st.columns(4)
+    metric_cols[0].metric(t("leads_week"), report.get("leads_created", 0))
+    metric_cols[1].metric(t("tasks_week"), report.get("tasks_created", 0))
+    metric_cols[2].metric(
+        t("approval_rate"),
+        f"{approval_rate:.1f}%" if approval_rate is not None else "—",
+        help=t("decided_tasks"),
+    )
+    metric_cols[3].metric(
+        t("avg_duration"),
+        f"{average_duration:.0f} ms" if average_duration is not None else "—",
+    )
+
+    st.markdown("<div class='section-gap'></div>", unsafe_allow_html=True)
+    lead_tab, task_tab, team_tab = st.tabs([
+        t("lead_pipeline"),
+        t("task_performance"),
+        t("department_activity"),
+    ])
+
+    with lead_tab:
+        lead_labels = {
+            "new": t("new_leads"),
+            "needs_information": t("info_leads"),
+            "qualified": t("qualified_leads"),
+        }
+        if any(lead_statuses.values()):
+            lead_frame = pd.DataFrame({
+                "الحالة" if st.session_state.language == "ar" else "Status":
+                    [lead_labels.get(key, key) for key in lead_statuses],
+                "العدد" if st.session_state.language == "ar" else "Count":
+                    list(lead_statuses.values()),
+            })
+            st.bar_chart(lead_frame.set_index(lead_frame.columns[0]))
+        else:
+            st.info(t("no_data"))
+
+    with task_tab:
+        if any(statuses.values()):
+            status_frame = pd.DataFrame({
+                "الحالة" if st.session_state.language == "ar" else "Status":
+                    [status_text(key) for key in statuses],
+                "العدد" if st.session_state.language == "ar" else "Count":
+                    list(statuses.values()),
+            })
+            st.bar_chart(status_frame.set_index(status_frame.columns[0]))
+        else:
+            st.info(t("no_tasks_period"))
+
+        if task_type_counts:
+            task_type_frame = pd.DataFrame({
+                "نوع المهمة" if st.session_state.language == "ar" else "Task type":
+                    [t(key) for key in task_type_counts],
+                "العدد" if st.session_state.language == "ar" else "Count":
+                    list(task_type_counts.values()),
+            })
+            st.markdown(f"### {t('task_mix')}")
+            st.bar_chart(task_type_frame.set_index(task_type_frame.columns[0]))
+
+    with team_tab:
+        department_labels = {
+            "Sales": t("sales"),
+            "Finance": t("finance"),
+            "Marketing": t("marketing"),
+            "Customer Success": t("customer_success"),
+            "Reporting": t("reporting"),
+        }
+        if any(department_counts.values()):
+            dept_frame = pd.DataFrame({
+                "القسم" if st.session_state.language == "ar" else "Department":
+                    [department_labels.get(key, key) for key in department_counts],
+                "المهام" if st.session_state.language == "ar" else "Tasks":
+                    list(department_counts.values()),
+            })
+            st.bar_chart(dept_frame.set_index(dept_frame.columns[0]))
+            st.dataframe(dept_frame, use_container_width=True, hide_index=True)
+        else:
+            st.info(t("no_tasks_period"))
+
+    summary_rows = [
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("leads_week"), "القيمة" if st.session_state.language == "ar" else "Value": report.get("leads_created", 0)},
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("tasks_week"), "القيمة" if st.session_state.language == "ar" else "Value": report.get("tasks_created", 0)},
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("pending"), "القيمة" if st.session_state.language == "ar" else "Value": statuses.get("pending_approval", 0)},
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("approved_tasks"), "القيمة" if st.session_state.language == "ar" else "Value": statuses.get("approved", 0)},
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("rejected"), "القيمة" if st.session_state.language == "ar" else "Value": statuses.get("rejected", 0)},
+        {"المؤشر" if st.session_state.language == "ar" else "Metric": t("approval_rate"), "القيمة" if st.session_state.language == "ar" else "Value": f"{approval_rate:.1f}%" if approval_rate is not None else "—"},
+    ]
+    csv_data = pd.DataFrame(summary_rows).to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        label=t("export_report"),
+        data=csv_data,
+        file_name=f"atlas-weekly-report-{period_end or 'summary'}.csv",
+        mime="text/csv",
+        use_container_width=False,
+    )
 
     with st.expander("تفاصيل التقرير" if st.session_state.language == "ar" else "Report details"):
         st.json(report)
@@ -909,6 +1058,17 @@ def inject_css() -> None:
         [data-testid="stDataFrame"] { border:1px solid #e5edf2;border-radius:12px;overflow:hidden; }
         h3 { color:#21394e;font-weight:800; }
         .stAlert { border-radius:12px; }
+        [data-testid="stTabs"] button { font-weight:700; border-radius:10px 10px 0 0; }
+        [data-testid="stSidebar"] [data-testid="stRadio"] label[data-checked="true"] { background:rgba(35,195,163,.18); border:1px solid rgba(35,195,163,.26); }
+        .metric-card { transition:transform .18s ease, box-shadow .18s ease; }
+        .metric-card:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(17,42,65,.08); }
+        [data-testid="stDownloadButton"] button { border-radius:10px; font-weight:700; }
+        @media (max-width: 720px) {
+          .block-container { padding-left:1rem; padding-right:1rem; padding-top:1.2rem; }
+          .page-heading h1 { font-size:25px; }
+          .metric-card { min-height:96px; padding:14px; }
+          .metric-value { font-size:24px; }
+        }
         footer { visibility:hidden; }
         </style>
         """,
@@ -976,7 +1136,7 @@ def main() -> None:
             st.session_state.language = language_choice
             st.rerun()
         st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
-        st.caption("ATLAS AI · Prototype 0.2.0")
+        st.caption("ATLAS AI · Prototype 0.3.0")
         st.caption(t("not_auth"))
 
     agency_id = st.session_state.agency_id
@@ -986,7 +1146,10 @@ def main() -> None:
     except APIError:
         api_ok = False
 
-    main_col, status_col = st.columns([0.82, 0.18])
+    main_col, status_col, refresh_col = st.columns([0.76, 0.17, 0.07])
+    with refresh_col:
+        if st.button("↻", help=t("refresh"), use_container_width=True):
+            st.rerun()
     with status_col:
         if api_ok:
             st.markdown(

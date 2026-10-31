@@ -32,7 +32,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="ATLAS AI API",
     description="Cloud-first API for a travel-agency multi-agent platform.",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -318,36 +318,82 @@ def weekly_report(
     db: Session = Depends(get_db),
     agency_id: str = Depends(_agency_id),
 ) -> dict[str, Any]:
+    """Return a seven-day operational summary from this agency's stored records."""
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=7)
+
+    lead_filter = (Lead.agency_id == agency_id, Lead.created_at >= since)
+    task_filter = (Task.agency_id == agency_id, Task.created_at >= since)
+
     leads_created = db.scalar(
-        select(func.count(Lead.id)).where(
-            Lead.agency_id == agency_id,
-            Lead.created_at >= since,
-        )
+        select(func.count(Lead.id)).where(*lead_filter)
     ) or 0
     tasks_created = db.scalar(
-        select(func.count(Task.id)).where(
-            Task.agency_id == agency_id,
-            Task.created_at >= since,
-        )
+        select(func.count(Task.id)).where(*task_filter)
     ) or 0
-    status_counts = {
+
+    lead_status_counts = {
         name: db.scalar(
-            select(func.count(Task.id)).where(
-                Task.agency_id == agency_id,
-                Task.created_at >= since,
-                Task.status == name,
-            )
+            select(func.count(Lead.id)).where(*lead_filter, Lead.status == name)
+        ) or 0
+        for name in ("new", "needs_information", "qualified")
+    }
+    task_status_counts = {
+        name: db.scalar(
+            select(func.count(Task.id)).where(*task_filter, Task.status == name)
         ) or 0
         for name in ("pending_approval", "approved", "rejected")
     }
+
+    task_types = (
+        db.execute(
+            select(Task.task_type, func.count(Task.id))
+            .where(*task_filter)
+            .group_by(Task.task_type)
+        ).all()
+    )
+    task_type_counts = {task_type: count for task_type, count in task_types}
+
+    department_for_task = {
+        "qualify_lead": "Sales",
+        "build_offer": "Sales",
+        "prepare_cost_sheet": "Finance",
+        "draft_invoice": "Finance",
+        "draft_marketing_content": "Marketing",
+        "draft_customer_reply": "Customer Success",
+        "classify_complaint": "Customer Success",
+        "generate_weekly_report": "Reporting",
+    }
+    department_task_counts = {
+        name: 0 for name in ("Sales", "Finance", "Marketing", "Customer Success", "Reporting")
+    }
+    for task_type, count in task_types:
+        department = department_for_task.get(task_type, "Other")
+        if department in department_task_counts:
+            department_task_counts[department] += count
+
+    decision_count = task_status_counts["approved"] + task_status_counts["rejected"]
+    approval_rate = (
+        round(task_status_counts["approved"] / decision_count * 100, 1)
+        if decision_count else None
+    )
+    average_duration_ms = db.scalar(
+        select(func.avg(Task.duration_ms)).where(*task_filter)
+    )
+    average_duration_ms = round(float(average_duration_ms), 1) if average_duration_ms is not None else None
+
     return {
         "period_start": since.isoformat(),
         "period_end": now.isoformat(),
         "leads_created": leads_created,
         "tasks_created": tasks_created,
-        "task_status_counts": status_counts,
+        "lead_status_counts": lead_status_counts,
+        "task_status_counts": task_status_counts,
+        "task_type_counts": task_type_counts,
+        "department_task_counts": department_task_counts,
+        "decided_tasks": decision_count,
+        "approval_rate_percent": approval_rate,
+        "average_task_duration_ms": average_duration_ms,
         "mode": "mock",
-        "note": "Prototype metrics for the selected agency only.",
+        "note": "Prototype metrics calculated only from recorded tasks and leads for the selected agency.",
     }

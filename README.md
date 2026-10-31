@@ -12,7 +12,7 @@ ATLAS AI is a cloud-first prototype for travel-agency operations. The system use
 | 1 | Cloud-first repository, Codespaces, Docker, documentation, CI and Pages setup | Complete |
 | 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented |
 | 3 | Initial Finance, Marketing, Customer Success workflows and expanded approval policies | Implemented (initial workflows) |
-| 4 | Streamlit Control Center connected to the API | Implemented (initial functional UI) |
+| 4 | Bilingual Streamlit Control Center, guided task workflows and operational reports | Implemented (enhanced prototype) |
 | 5 | Bilingual static landing page and interactive mock demo | Planned |
 | 6 | Expanded tests, security hardening and production deployment guidance | Planned |
 
@@ -40,7 +40,7 @@ Open forwarded port **8501** from the Codespaces **Ports** panel. The applicatio
 - **Leads:** add and search customer travel requests.
 - **Task center:** create sales, finance, marketing, support, and complaint tasks; inspect outputs, edit, approve, or reject.
 - **AI team:** view department managers and specialist agents across Sales, Finance, Marketing, Customer Success, and Reporting.
-- **Reports:** weekly lead and task activity.
+- **Reports:** seven-day lead pipeline, task status, task-type and department activity, approval rate, average task processing time, and CSV export.
 - **Settings:** prototype connection and agency context.
 
 The dashboard connects to FastAPI through `ATLAS_API_URL` (default: `http://127.0.0.1:8000`) and sends `X-Agency-ID` with each request.
@@ -141,7 +141,7 @@ python -m streamlit run dashboard/app.py --server.address 0.0.0.0 --server.port 
 - **العملاء:** تسجيل طلبات السفر والبحث فيها.
 - **مركز المهام:** إرسال المهام للوكلاء ومراجعة النتائج وتعديلها واعتمادها أو رفضها.
 - **فريق الذكاء الاصطناعي:** عرض الهيكل الحالي للمدير العام وفريق المبيعات.
-- **التقارير:** ملخص نشاط آخر سبعة أيام.
+- **التقارير:** مسار العملاء وحالة المهام ونشاط الأقسام ونسبة الاعتماد ومتوسط زمن التنفيذ مع تصدير CSV.
 - **الإعدادات:** سياق الوكالة والاتصال التجريبي.
 
 يمكنك تشغيل الواجهة والـ API معًا باستخدام Docker Compose:

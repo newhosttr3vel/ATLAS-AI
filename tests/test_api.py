@@ -301,8 +301,18 @@ def test_edit_keeps_owner_approval_required(client: TestClient) -> None:
 
 
 def test_agents_and_weekly_report_include_activity(client: TestClient) -> None:
-    lead = client.post("/api/leads", json={"customer_name": "Report Demo"}).json()
-    client.post("/api/tasks", json={"task_type": "qualify_lead", "lead_id": lead["id"]})
+    lead = client.post(
+        "/api/leads",
+        json={
+            "customer_name": "Report Demo",
+            "destination": "Makkah",
+            "travelers": 2,
+            "phone": "01000000000",
+        },
+    ).json()
+    task = client.post("/api/tasks", json={"task_type": "qualify_lead", "lead_id": lead["id"]}).json()
+    client.post(f"/api/tasks/{task['id']}/approve", json={"notes": "reviewed"})
+    client.post("/api/tasks", json={"task_type": "draft_marketing_content", "lead_id": lead["id"]})
 
     agents = client.get("/api/agents").json()
     assert {agent["agent_id"] for agent in agents} >= {
@@ -313,8 +323,27 @@ def test_agents_and_weekly_report_include_activity(client: TestClient) -> None:
 
     report = client.get("/api/reports/weekly").json()
     assert report["leads_created"] == 1
-    assert report["tasks_created"] == 1
+    assert report["tasks_created"] == 2
     assert report["task_status_counts"]["pending_approval"] == 1
+    assert report["task_status_counts"]["approved"] == 1
+    assert report["approval_rate_percent"] == 100.0
+    assert report["lead_status_counts"]["needs_information"] == 1
+    assert report["task_type_counts"]["qualify_lead"] == 1
+    assert report["task_type_counts"]["draft_marketing_content"] == 1
+    assert report["department_task_counts"]["Sales"] == 1
+    assert report["department_task_counts"]["Marketing"] == 1
+    assert report["average_task_duration_ms"] is not None
+
+
+def test_weekly_report_is_scoped_to_the_selected_agency(client: TestClient) -> None:
+    lead = client.post("/api/leads", json={"customer_name": "Agency A"}).json()
+    client.post("/api/tasks", json={"task_type": "qualify_lead", "lead_id": lead["id"]})
+    response = client.get("/api/reports/weekly", headers={"X-Agency-ID": "agency-b"})
+    assert response.status_code == 200
+    report = response.json()
+    assert report["leads_created"] == 0
+    assert report["tasks_created"] == 0
+    assert all(value == 0 for value in report["department_task_counts"].values())
 
 
 def test_task_lookup_and_missing_lead(client: TestClient) -> None:
