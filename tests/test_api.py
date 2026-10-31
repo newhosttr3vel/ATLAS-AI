@@ -62,6 +62,7 @@ def test_general_manager_routes_qualification_for_owner_review(client: TestClien
             "travel_start": "2027-02-01",
             "travel_end": "2027-02-05",
             "travelers": 2,
+            "phone": "01012345678",
         },
     )
     lead_id = lead_response.json()["id"]
@@ -76,6 +77,8 @@ def test_general_manager_routes_qualification_for_owner_review(client: TestClien
     assert task["status"] == "pending_approval"
     assert task["requires_owner_approval"] is True
     assert task["result"]["result"]["qualification_status"] == "qualified"
+    assert task["result"]["result"]["completeness_score"] == 75
+    assert task["result"]["confidence"] == 0.0
     assert {
         "result",
         "confidence",
@@ -85,6 +88,33 @@ def test_general_manager_routes_qualification_for_owner_review(client: TestClien
         "requires_owner_approval",
     }.issubset(task["result"])
 
+
+
+def test_qualification_explains_missing_contact_and_recommended_details(client: TestClient) -> None:
+    lead = client.post(
+        "/api/leads",
+        json={
+            "customer_name": "Incomplete Lead",
+            "destination": "Makkah",
+            "travel_start": "2027-04-10",
+            "travel_end": "2027-04-14",
+            "travelers": 2,
+        },
+    ).json()
+
+    task = client.post(
+        "/api/tasks",
+        json={"task_type": "qualify_lead", "lead_id": lead["id"]},
+    )
+    assert task.status_code == 201
+    result = task.json()["result"]["result"]
+
+    assert result["qualification_status"] == "needs_information"
+    assert result["completeness_score"] == 55
+    assert result["critical_missing_fields"] == ["contact_method"]
+    assert result["recommended_missing_fields"] == ["budget_amount", "preferences"]
+    assert any("رقم الهاتف أو البريد الإلكتروني" in question for question in result["recommended_questions"])
+    assert "لا يمكن متابعة العميل" in " ".join(task.json()["result"]["risks"])
 
 def test_owner_can_approve_or_reject_pending_tasks(client: TestClient) -> None:
     lead = client.post("/api/leads", json={"customer_name": "Approval Demo"}).json()

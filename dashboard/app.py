@@ -163,6 +163,21 @@ TEXT = {
         "availability": "التوافر",
         "not_verified": "غير متحقق",
         "not_provided": "غير محدد",
+        "data_completeness": "اكتمال البيانات",
+        "qualification": "قرار التأهيل",
+        "ready_for_offer": "جاهز مبدئيًا لإعداد مسودة عرض",
+        "needs_more_info": "يحتاج استكمال بيانات أساسية",
+        "critical_missing": "بيانات أساسية ناقصة",
+        "recommended_missing": "بيانات إضافية يُنصح باستكمالها",
+        "follow_up_questions": "أسئلة المتابعة المقترحة",
+        "lead_snapshot": "ملخص بيانات الطلب",
+        "contact_method": "وسيلة التواصل",
+        "duration_nights": "مدة الرحلة (ليالٍ)",
+        "budget_per_traveler": "الميزانية التقديرية للفرد",
+        "preferences": "التفضيلات والمتطلبات",
+        "not_recorded": "غير مسجل",
+        "no_critical_gaps": "لا توجد بيانات أساسية ناقصة.",
+        "no_recommended_gaps": "البيانات الإضافية مكتملة.",
     },
     "en": {
         "nav": "WORKSPACE",
@@ -265,6 +280,21 @@ TEXT = {
         "availability": "Availability",
         "not_verified": "Not verified",
         "not_provided": "Not provided",
+        "data_completeness": "Data completeness",
+        "qualification": "Qualification decision",
+        "ready_for_offer": "Ready for an initial offer draft",
+        "needs_more_info": "More essential information is needed",
+        "critical_missing": "Missing essential information",
+        "recommended_missing": "Additional details recommended",
+        "follow_up_questions": "Suggested follow-up questions",
+        "lead_snapshot": "Lead snapshot",
+        "contact_method": "Contact method",
+        "duration_nights": "Trip duration (nights)",
+        "budget_per_traveler": "Estimated budget per traveler",
+        "preferences": "Preferences and requirements",
+        "not_recorded": "Not recorded",
+        "no_critical_gaps": "No essential information is missing.",
+        "no_recommended_gaps": "Recommended details are complete.",
     },
 }
 
@@ -528,17 +558,75 @@ def render_tasks(agency_id: str) -> None:
         title = task.get("title") or task.get("task_type", "Task")
         with st.expander(f"{title}   ·   {status_text(task_status)}", expanded=task_status == "pending_approval"):
             c1, c2, c3 = st.columns(3)
-            c1.metric(t("assigned_to"), task.get("assigned_agent_id", "—"))
-            c2.metric(t("confidence"), f"{task.get('confidence', 0):.0%}")
-            c3.metric(t("status"), status_text(task_status))
             response = task.get("result") or {}
             result = response.get("result", {})
+            c1.metric(t("assigned_to"), task.get("assigned_agent_id", "—"))
+            if task.get("task_type") == "qualify_lead" and isinstance(result, dict) and "completeness_score" in result:
+                c2.metric(t("data_completeness"), f"{result.get('completeness_score', 0)}%")
+            else:
+                c2.metric(t("confidence"), f"{task.get('confidence', 0):.0%}")
+            c3.metric(t("status"), status_text(task_status))
             st.markdown(f"**{t('result')}**")
             if isinstance(result, dict):
                 if result.get("summary"):
                     st.write(result["summary"])
-                if result.get("missing_fields"):
-                    st.warning("المعلومات الناقصة: " + "، ".join(result["missing_fields"]))
+
+                if task.get("task_type") == "qualify_lead":
+                    qualification_status = result.get("qualification_status")
+                    if qualification_status == "qualified":
+                        st.success(t("ready_for_offer"))
+                    else:
+                        st.warning(t("needs_more_info"))
+
+                    field_labels = {
+                        "destination": t("destination"),
+                        "travel_start": t("start_date"),
+                        "travel_end": t("end_date"),
+                        "travelers": t("travelers"),
+                        "contact_method": t("contact_method"),
+                        "budget_amount": t("budget"),
+                        "preferences": t("preferences"),
+                    }
+                    critical = result.get("critical_missing_fields", result.get("missing_fields", []))
+                    recommended = result.get("recommended_missing_fields", [])
+                    if critical:
+                        st.error(t("critical_missing") + ": " + "، ".join(field_labels.get(key, key) for key in critical))
+                    else:
+                        st.success(t("no_critical_gaps"))
+                    if recommended:
+                        st.warning(t("recommended_missing") + ": " + "، ".join(field_labels.get(key, key) for key in recommended))
+                    else:
+                        st.caption(t("no_recommended_gaps"))
+
+                    snapshot = result.get("lead_snapshot") or {}
+                    snapshot_labels = {
+                        "customer_name": t("customer_name"),
+                        "destination": t("destination"),
+                        "travel_start": t("start_date"),
+                        "travel_end": t("end_date"),
+                        "duration_nights": t("duration_nights"),
+                        "travelers": t("travelers"),
+                        "contact_method": t("contact_method"),
+                        "budget": t("budget"),
+                        "budget_per_traveler": t("budget_per_traveler"),
+                        "preferences": t("preferences"),
+                    }
+                    snapshot_rows = [
+                        {"البيان" if st.session_state.language == "ar" else "Detail": snapshot_labels.get(key, key),
+                         "القيمة" if st.session_state.language == "ar" else "Value": value if value not in (None, "") else t("not_recorded")}
+                        for key, value in snapshot.items()
+                        if key in snapshot_labels
+                    ]
+                    if snapshot_rows:
+                        st.markdown(f"**{t('lead_snapshot')}**")
+                        st.dataframe(pd.DataFrame(snapshot_rows), use_container_width=True, hide_index=True)
+
+                    questions = result.get("recommended_questions", [])
+                    if questions:
+                        with st.expander(t("follow_up_questions")):
+                            for index, question in enumerate(questions, start=1):
+                                st.write(f"{index}. {question}")
+
                 if result.get("packages"):
                     st.warning(t("offer_warning"))
                     st.dataframe(pd.DataFrame(result["packages"]), use_container_width=True, hide_index=True)
