@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    container_name: meyaar-ai-api
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
