@@ -3,75 +3,53 @@
 **A virtual multi-agent operations team for travel agencies**  
 **فريق ذكاء اصطناعي افتراضي لإدارة شركات السياحة**
 
-> **Current delivery stage: Phase 1 — Cloud-first foundation.** This repository currently contains the project foundation only. Working agents, business workflows, approvals, and the operational dashboard are planned for later phases.
+ATLAS AI is a cloud-first prototype for travel-agency operations. The system uses a General Manager agent to route work to specialist crews, while keeping the owner in control of approvals.
 
-## Product principles
+## Current delivery status
 
-- **Owner in the loop:** customer-facing offers and messages require explicit owner approval.
-- **Safe by default:** no real bookings, availability confirmations, payments, or outbound customer messages.
-- **Mock first:** the prototype must run without paid services or provider API keys.
-- **No invented facts:** agents must request missing information and clearly label assumptions or estimates.
-- **Cloud-first development:** GitHub Codespaces is the development environment; installing Python or Docker Desktop on your computer is not required.
-- **Separate demo and backend:** GitHub Pages serves static files from `docs/` only. It does not run FastAPI, CrewAI, SQLite, or Streamlit.
-- **Future-ready:** SQLite is for the prototype; the architecture is intended to support PostgreSQL and multiple travel agencies later.
+| Phase | Scope | Status |
+|---|---|---|
+| 1 | Cloud-first repository, Codespaces, Docker, documentation, CI and Pages setup | Complete |
+| 2 | FastAPI, SQLite, Mock LLM, General Manager and first Sales Crew workflows | Implemented; validating in CI |
+| 3 | Finance, Marketing, Customer Success, Reporting and expanded approval policies | Planned |
+| 4 | Streamlit Control Center connected to the API | Planned |
+| 5 | Bilingual static landing page and interactive mock demo | Planned |
+| 6 | Expanded tests, security hardening and production deployment guidance | Planned |
 
-## Technology
+## Phase 2 capabilities
 
-- Python 3.11+
-- FastAPI for the API
-- CrewAI for planned agent orchestration (optional dependency, installed separately)
-- SQLite for the prototype database
-- Streamlit for the planned operations dashboard
-- Docker and Docker Compose inside GitHub Codespaces
-- GitHub Actions for CI and static Pages deployment
-- pytest for automated tests
+- Persist travel leads in SQLite.
+- Create and retrieve lead-qualification and draft-offer tasks.
+- Route tasks through the General Manager to the Sales Crew.
+- Include lead qualifier and offer builder specialist agents.
+- Review, edit, approve, or reject pending owner-review tasks.
+- Retrieve agent status and a seven-day activity summary.
+- Generate deterministic mock outputs without API keys.
+- Keep draft offers unpriced and mark supplier availability as unverified.
 
-## Repository structure
+### Current API routes
 
-```text
-ATLAS-AI/
-├── .devcontainer/
-│   └── devcontainer.json
-├── .github/workflows/
-│   ├── ci.yml
-│   └── deploy-pages.yml
-├── backend/
-│   ├── agents/
-│   ├── crews/
-│   ├── services/
-│   ├── tools/
-│   └── main.py
-├── dashboard/
-├── docs/                    # Static GitHub Pages demo only
-├── tests/
-├── .dockerignore
-├── .env.example
-├── .gitignore
-├── Dockerfile
-├── docker-compose.yml
-├── LICENSE
-├── requirements.txt         # Core app dependencies
-├── requirements-agents.txt  # Optional CrewAI dependencies
-└── README.md
-```
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/` | API service information |
+| GET | `/health` | Health check |
+| POST | `/api/leads` | Create a lead |
+| GET | `/api/leads` | List agency leads |
+| POST | `/api/tasks` | Route a supported sales task |
+| GET | `/api/tasks` | List tasks |
+| GET | `/api/tasks/{task_id}` | Retrieve task detail |
+| POST | `/api/tasks/{task_id}/approve` | Approve a pending task |
+| POST | `/api/tasks/{task_id}/reject` | Reject a pending task |
+| POST | `/api/tasks/{task_id}/edit` | Edit a pending result without removing approval |
+| GET | `/api/agents` | List prototype agents and activity |
+| GET | `/api/reports/weekly` | Seven-day activity summary |
 
-## Develop entirely in the browser
+## Develop in the browser with GitHub Codespaces
 
-### 1. Create the cloud workspace
-
-1. Open [the ATLAS AI repository](https://github.com/newhosttr3vel/ATLAS-AI).
-2. Select **Code → Codespaces**.
-3. Select **Create codespace on main**.
-4. Wait for the development container to finish building.
-5. Use the integrated terminal inside the browser.
-
-The Dev Container configuration provides Python 3.11 and Docker tooling through the Docker-in-Docker feature. It installs the core Python dependencies and creates a local ignored `.env` file from `.env.example`.
-
-**You do not need to install Docker Desktop, Python, or a code editor on your computer.** A Docker Hub account is also not needed just to build and run this project's containers inside Codespaces.
-
-### 2. Prepare the virtual environment
-
-In the Codespaces terminal, run:
+1. Open [the repository](https://github.com/newhosttr3vel/ATLAS-AI).
+2. Select **Code → Codespaces → Create codespace on main**.
+3. Open the integrated terminal.
+4. Prepare the environment:
 
 ```bash
 python -m venv .venv
@@ -80,140 +58,141 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-The core requirements intentionally do not install CrewAI. This keeps API development, the dashboard, and tests independent from optional vector-database and ONNX Runtime wheels. CrewAI is isolated in `requirements-agents.txt` and will be installed after the Codespaces platform compatibility is confirmed.
-
-### 3. Run tests and start the API
+5. Run the tests:
 
 ```bash
 python -m pytest -q
+```
+
+6. Start the API:
+
+```bash
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open the forwarded port **8000** from the Codespaces **Ports** panel:
+Open port 8000 in the Codespaces **Ports** panel, then visit `/docs` to explore the API.
 
-- Health check: `/health`
-- Interactive API documentation: `/docs`
-
-### 4. Run with Docker Compose in the cloud
+### Run with Docker in Codespaces
 
 ```bash
 docker compose up --build
 ```
 
-To stop the services:
+Stop the containers with `docker compose down`.
 
-```bash
-docker compose down
-```
+**No local Docker Desktop or Python installation is required.** Codespaces is a development environment, not permanent production hosting.
 
-The API uses port 8000. SQLite files are stored under `data/`, which is intentionally excluded from Git.
+## Dependencies
 
-## Optional CrewAI installation
+- `requirements.txt`: core API, Streamlit, SQLAlchemy and test dependencies.
+- `requirements-agents.txt`: optional CrewAI integration. Do not install it until the Codespaces platform has compatible ONNX Runtime and LanceDB wheels.
 
-Do not install the optional CrewAI requirements until the Codespaces Python version, CPU architecture, and supported package wheels have been checked. When compatibility is confirmed, install with:
+The current Sales Crew intentionally uses deterministic mock agents. CrewAI orchestration is not imported by the running API yet, so the prototype works without provider credentials or heavyweight vector-store dependencies.
 
-```bash
-python -m pip install -r requirements-agents.txt
-```
+## Data and agency isolation
 
-The default prototype mode remains mock-driven and must not require a provider API key.
+Lead and task records include an `agency_id`. Requests can select a demo agency with the `X-Agency-ID` header; if omitted, the API uses `demo-agency`.
 
-## GitHub Pages
+This is a prototype data-partitioning mechanism, **not authentication or a security boundary**. Before real customer use, implement authentication, role-based authorization, tenant isolation tests, audit logs, backups, and a production database.
 
-GitHub Pages is reserved for the public static demo. It cannot host the Python API, database, agent runtime, or Streamlit dashboard.
+## Operating and safety boundaries
 
-The repository workflow publishes the `docs/` directory when relevant changes reach `main`. The interactive bilingual demo is planned for Phase 5.
+- No real bookings, supplier availability, inventory, or confirmed prices are connected.
+- Offer package tiers are planning structures only; price is `null` and availability is `not_verified`.
+- All sales tasks remain `pending_approval` until explicitly approved or rejected by the owner.
+- No customer-facing messages or booking actions are sent.
+- Never commit `.env`, API keys, tokens, passwords, or real customer information.
+- GitHub Pages publishes only static files from `docs/`; it does not host this API or database.
 
-## Security and operating boundaries
+## Architecture
 
-- Never commit `.env`, API keys, passwords, tokens, or private keys.
-- Do not put secrets in the static `docs/` site or GitHub Pages.
-- Do not use real customer records or booking documents in this prototype.
-- No agent may confirm a booking, guarantee availability, invent a price, or send a customer-facing message without owner approval.
-- Codespaces is a development environment, not permanent production hosting.
-- Production use will require authentication, tenant isolation, role-based permissions, audit logs, backups, monitoring, and a separately hosted backend.
-
-## Delivery roadmap
-
-| Phase | Scope | Status |
-|---|---|---|
-| 1 | Repository foundation, Codespaces, Docker, documentation, CI and Pages workflow | Foundation |
-| 2 | FastAPI, SQLite models, Mock LLM, General Manager and Sales Crew | Planned |
-| 3 | Finance, Marketing, Customer Success, Reporting and owner approvals | Planned |
-| 4 | Streamlit Control Center connected to the API | Planned |
-| 5 | Bilingual static landing page and interactive mock demo | Planned |
-| 6 | Expanded tests, security hardening and future deployment guidance | Planned |
+- Python 3.11+
+- FastAPI
+- SQLAlchemy + SQLite
+- Pydantic v2
+- Deterministic Mock LLM adapter
+- General Manager + Sales Crew
+- Streamlit dashboard (planned)
+- CrewAI adapter (optional future integration)
+- GitHub Actions, GitHub Pages, Docker and Codespaces
 
 ---
 
 # العربية
 
-## ما هو ATLAS AI؟
+## فكرة ATLAS AI
 
-منصة SaaS قيد التطوير لشركات السياحة، تعتمد على فريق من وكلاء الذكاء الاصطناعي المتخصصين في المبيعات والتسويق والمالية وخدمة العملاء والتقارير، مع وجود مدير عام ينسّق العمل ويرفع النتائج لصاحب الشركة للمراجعة والاعتماد.
+منصة لإدارة عمليات شركات السياحة عن طريق فريق من وكلاء الذكاء الاصطناعي. المدير العام يستقبل المهمة ويوجهها إلى القسم المناسب، والمالك يراجع النتائج ويعتمدها قبل أي إجراء حساس أو تواصل مع العميل.
 
-**الموجود حاليًا هو مرحلة تأسيس المشروع فقط، وليس نظامًا تشغيليًا مكتملًا.**
+## ما تم تنفيذه في المرحلة الثانية
 
-## طريقة العمل — أونلاين بالكامل
+- قاعدة بيانات SQLite لحفظ العملاء والمهام.
+- إضافة عميل جديد وعرض قائمة العملاء.
+- المدير العام يوجه مهام المبيعات إلى الوكلاء المتخصصين.
+- وكيل تأهيل العملاء يراجع اكتمال بيانات الرحلة ويحدد المعلومات الناقصة.
+- وكيل إعداد العروض ينشئ ثلاثة مستويات تخطيطية: اقتصادي ومتوازن ومميز.
+- مراجعة المهمة وتعديل نتيجتها أو اعتمادها أو رفضها.
+- عرض الوكلاء وحالة نشاطهم وملخص أسبوعي.
+- وضع Mock يعمل بدون API Keys أو خدمات مدفوعة.
 
-1. افتح [مستودع ATLAS AI على GitHub](https://github.com/newhosttr3vel/ATLAS-AI).
-2. اضغط **Code → Codespaces → Create codespace on main**.
-3. انتظر تجهيز بيئة العمل السحابية.
-4. افتح Terminal من داخل المتصفح.
+## تجربة الـ API
 
-بيئة Codespaces مجهزة لتوفير Python 3.11 وأدوات Docker داخل البيئة السحابية. لا تحتاج إلى تثبيت Docker Desktop أو Python على جهازك.
+بعد تشغيل السيرفر افتح:
 
-## تجهيز بيئة Python
+- `/docs` لتجربة الـ API.
+- `/health` لفحص التشغيل.
+- `/api/agents` لعرض الوكلاء.
+- `/api/reports/weekly` لملخص النشاط.
 
-نفّذ الأوامر التالية داخل Terminal:
+### إنشاء عميل تجريبي
+
+أرسل POST إلى `/api/leads` بالبيانات التالية:
+
+```json
+{
+  "customer_name": "Demo Customer",
+  "destination": "Makkah",
+  "travel_start": "2027-01-10",
+  "travel_end": "2027-01-15",
+  "travelers": 3,
+  "budget_amount": 25000,
+  "currency_code": "EGP"
+}
+```
+
+### تشغيل مهمة تأهيل العميل
+
+استخدم قيمة `id` التي رجعت من إنشاء العميل في الطلب التالي إلى `/api/tasks`:
+
+```json
+{
+  "task_type": "qualify_lead",
+  "lead_id": "PASTE_LEAD_ID_HERE"
+}
+```
+
+يمكنك أيضًا استخدام `build_offer` لإعداد هيكل عرض مبدئي غير مسعّر.
+
+**مهم:** هذه عروض تجريبية لا تحتوي على أسعار فعلية أو تأكيد توافر. كل مهمة مبيعات تتطلب موافقة المالك، ولا يتم إرسال رسائل أو تنفيذ حجوزات.
+
+## تشغيل المشروع من Codespaces
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
-
-قسمنا المتطلبات إلى ملفين:
-
-- `requirements.txt`: المكتبات الأساسية لتشغيل الـ API والداشبورد والاختبارات.
-- `requirements-agents.txt`: مكتبات CrewAI الاختيارية، ولن نثبتها إلا بعد التأكد من توافق إصدار Python ومعمارية Codespaces مع حزم ONNX وLanceDB.
-
-الهدف من الفصل ده إن مشكلة مكتبة اختيارية ما توقفش تشغيل واختبار أساس المشروع.
-
-## تشغيل الاختبارات والـ API
-
-```bash
 python -m pytest -q
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-افتح المنفذ **8000** من تبويب **Ports**:
-
-- فحص حالة التطبيق: `/health`
-- توثيق الـ API: `/docs`
-
-## تشغيل Docker
+لتشغيل Docker من داخل Codespaces:
 
 ```bash
 docker compose up --build
 ```
 
-ولإيقاف الخدمات:
+لا تحتاج إلى تثبيت Docker Desktop على جهازك.
 
-```bash
-docker compose down
-```
+## تنبيه الأمان
 
-Docker هيشتغل داخل Codespaces، وليس على جهازك.
-
-## قواعد الأمان
-
-- لا ترفع أي API Key أو كلمة مرور أو Token إلى GitHub.
-- لا تستخدم بيانات عملاء حقيقية في النسخة التجريبية.
-- لا يتم تأكيد حجز أو سعر أو توافر، ولا إرسال رسالة للعميل، دون تحقق وموافقة المالك.
-- أي افتراض أو سعر تقديري يجب توضيحه وعدم تقديمه كحقيقة مؤكدة.
-
-## مراحل التنفيذ
-
-سننفذ المشروع على مراحل مستقلة، ونراجع نتيجة كل مرحلة واختباراتها قبل الانتقال إلى التالية. المرحلة الحالية هي **Phase 1 — Foundation**.
+حقل `X-Agency-ID` لعزل بيانات الوكالات في النموذج الأولي فقط، وليس نظام تسجيل دخول أو حماية نهائي. قبل الاستخدام التجاري الحقيقي يجب إضافة تسجيل الدخول والصلاحيات والتدقيق وسلامة عزل بيانات كل وكالة.
