@@ -1,7 +1,7 @@
 services:
   api:
     build: .
-    container_name: meyaar-ai-api
+    container_name: atlas-ai-api
     env_file:
       - .env
     ports:

@@ -1,18 +1,30 @@
-# Meyaar AI Platform
+# ATLAS AI
 
-**فريق AI افتراضي لإدارة شركات السياحة**  
-*A virtual AI team for travel agencies.*
+**A virtual multi-agent operations team for travel agencies**  
+**فريق ذكاء اصطناعي افتراضي لإدارة شركات السياحة**
 
-> **Current stage: Phase 1 — Cloud-first project foundation.** This stage establishes the repository, Codespaces development environment, Docker setup, documentation, and CI workflows. Agent execution and business features come in later phases.
+> **Current delivery stage: Phase 1 — Cloud-first foundation.** This repository currently contains the project foundation only. Working agents, business workflows, approvals, and the operational dashboard are planned for later phases.
 
 ## Product principles
 
-- **Owner-in-the-loop:** no customer-facing offer or message is sent without owner approval.
-- **Safe by default:** no real API keys, secrets, payments, bookings, or outbound messaging.
-- **Mock first:** the prototype starts with deterministic mock behavior and no external LLM key.
-- **Cloud-first development:** GitHub Codespaces is the primary development environment. No local Python or Docker installation is required.
-- **Separate demo and backend:** GitHub Pages serves only static files from `docs/`; it does not run FastAPI, CrewAI, SQLite, or Streamlit.
-- **Future-ready:** SQLite for the prototype, with a migration path to PostgreSQL and multi-agency tenancy.
+- **Owner in the loop:** customer-facing offers and messages require explicit owner approval.
+- **Safe by default:** no real bookings, availability confirmations, payments, or outbound customer messages.
+- **Mock first:** the prototype must run without paid services or provider API keys.
+- **No invented facts:** agents must request missing information and clearly label assumptions or estimates.
+- **Cloud-first development:** GitHub Codespaces is the development environment; installing Python or Docker Desktop on your computer is not required.
+- **Separate demo and backend:** GitHub Pages serves static files from `docs/` only. It does not run FastAPI, CrewAI, SQLite, or Streamlit.
+- **Future-ready:** SQLite is for the prototype; the architecture is intended to support PostgreSQL and multiple travel agencies later.
+
+## Technology
+
+- Python 3.11+
+- FastAPI for the API
+- CrewAI for the planned agent orchestration
+- SQLite for the prototype database
+- Streamlit for the planned operations dashboard
+- Docker and Docker Compose inside GitHub Codespaces
+- GitHub Actions for CI and static Pages deployment
+- pytest for automated tests
 
 ## Repository structure
 
@@ -27,10 +39,12 @@ ATLAS-AI/
 │   ├── agents/
 │   ├── crews/
 │   ├── services/
-│   └── tools/
+│   ├── tools/
+│   └── main.py
 ├── dashboard/
 ├── docs/                  # Static GitHub Pages demo only
 ├── tests/
+├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── Dockerfile
@@ -40,149 +54,144 @@ ATLAS-AI/
 └── README.md
 ```
 
-## Cloud-first quick start (recommended)
+## Develop entirely in the browser
 
-### 1. Create a Codespace
+### 1. Create the cloud workspace
 
-1. Open this repository on GitHub.
-2. Select **Code → Codespaces → Create codespace on main**.
-3. Wait for the cloud development container to initialize.
-4. Open the integrated terminal in the browser.
+1. Open [the ATLAS AI repository](https://github.com/newhosttr3vel/ATLAS-AI).
+2. Select **Code → Codespaces**.
+3. Select **Create codespace on main**.
+4. Wait for the development container to finish building.
+5. Use the integrated terminal inside the browser.
 
-The `.devcontainer/devcontainer.json` file configures Python 3.11, Docker tooling, and forwarded development ports. You do not need to install Python or Docker Desktop on your personal computer.
+The Dev Container configuration provides Python 3.11 and Docker tooling through the Docker-in-Docker feature. It installs the Python dependencies, creates a local ignored `.env` file from `.env.example`, and forwards ports 8000 and 8501.
 
-### 2. Install project dependencies
+**You do not need to install Docker Desktop, Python, or a code editor on your computer.** A Docker Hub account is also not needed just to build and run this project's containers inside Codespaces.
 
-The Codespaces container runs the setup command automatically. If you need to repeat it:
+### 2. Run the foundation API
 
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-cp .env.example .env
-```
-
-### 3. Run tests and start the API
+The environment is prepared automatically. In the Codespaces terminal, run:
 
 ```bash
 pytest -q
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open the forwarded port 8000 in the Codespaces **Ports** panel:
-- Health: `/health`
-- API docs: `/docs`
+Open the forwarded port **8000** from the Codespaces **Ports** panel:
 
-### 4. Run Docker Compose in the cloud
+- Health check: `/health`
+- Interactive API documentation: `/docs`
 
-From the Codespaces terminal:
+### 3. Run with Docker Compose in the cloud
+
+The Codespaces environment includes Docker and Compose. Run:
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
-The API will be available through forwarded port 8000. Docker runs in the Codespaces cloud environment; it is not installed on your personal computer.
+To stop the services:
 
-## Optional local development
+```bash
+docker compose down
+```
 
-Local execution is optional, not the primary workflow. If you later choose to work locally, install Python 3.11+ and Docker, then use the same commands above.
+The API uses port 8000. SQLite files are stored under `data/`, which is intentionally excluded from Git.
 
-## Environment and secrets
+## GitHub Pages
 
-`.env.example` contains safe defaults. Copy it to `.env` inside Codespaces. The `.env` file is ignored by Git.
+GitHub Pages is reserved for the public static demo. It cannot host the Python API, database, agent runtime, or Streamlit dashboard.
 
-Never commit:
-- `.env` or provider credentials
-- API keys, tokens, passwords, private keys
-- real customer information or booking documents
+To enable the deployment workflow:
 
-Future model-provider keys must be injected through environment variables or a secrets manager. GitHub Pages must never receive backend credentials.
-
-## GitHub Pages demo
-
-The `docs/` directory is reserved for a static HTML/CSS/JavaScript demo. It must not call the backend or contain secrets.
-
-To enable deployment:
 1. Open **Settings → Pages** in this repository.
 2. Set **Build and deployment → Source** to **GitHub Actions**.
-3. Push changes to `main`; `deploy-pages.yml` publishes the contents of `docs/`.
+3. The `deploy-pages.yml` workflow will publish the `docs/` directory when relevant changes reach `main`.
 
-GitHub Pages is a static demo only. It cannot host FastAPI, CrewAI, SQLite, or Streamlit.
+The current `docs/index.html` is only a branded placeholder. The interactive bilingual demo is planned for Phase 5.
 
-## Workflows
+## Security and operating boundaries
 
-- `ci.yml`: installs dependencies, runs pytest, and verifies the FastAPI application can be imported.
-- `deploy-pages.yml`: publishes only `docs/` to GitHub Pages after changes to the demo or workflow.
+- Never commit `.env`, API keys, passwords, tokens, or private keys.
+- Do not put secrets in the static `docs/` site or GitHub Pages.
+- Do not use real customer records or booking documents in this prototype.
+- No agent may confirm a booking, guarantee availability, invent a price, or send a customer-facing message without owner approval.
+- Codespaces is a development environment, not permanent production hosting.
+- Production use will require authentication, tenant isolation, role-based permissions, audit logs, backups, monitoring, and a separately hosted backend.
 
 ## Delivery roadmap
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 | Repository, Codespaces, Docker, docs, CI and Pages workflows | Foundation |
-| 2 | FastAPI, SQLite models, Mock LLM, General Manager + Sales Crew | Planned |
-| 3 | Finance, Marketing, Customer Success, Reporting, owner approvals | Planned |
+| 1 | Repository foundation, Codespaces, Docker, documentation, CI and Pages workflow | Foundation |
+| 2 | FastAPI, SQLite models, Mock LLM, General Manager and Sales Crew | Planned |
+| 3 | Finance, Marketing, Customer Success, Reporting and owner approvals | Planned |
 | 4 | Streamlit Control Center connected to the API | Planned |
-| 5 | Static bilingual landing page and interactive mock demo | Planned |
-| 6 | Tests, security hardening, migration and deployment guides | Planned |
-
-## Architecture decisions
-
-### Multi-agency readiness
-The prototype will be designed so that agency/tenant scoping can be introduced consistently. Before real SaaS use, add tenant isolation, authentication, role-based access control, audit trails, backups, monitoring, and production-grade PostgreSQL migrations.
-
-### Agent orchestration
-CrewAI is the planned orchestration layer. The default prototype path must remain deterministic and mock-driven, so the application can be demonstrated without API keys. Real model providers such as Ollama or hosted APIs are later opt-in adapters.
-
-### Production hosting
-Codespaces is for development and testing, not always-on production hosting. GitHub Pages is for the static demo only. A later phase must deploy the API, database, and dashboard to a separately secured runtime.
-
-## Current limitations
-
-This is a foundation scaffold, not yet a functional SaaS. Leads, task routing, CrewAI execution, approvals, reports, and the Streamlit dashboard are implemented in subsequent phases. No customer messages, bookings, payments, or price confirmations are enabled.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+| 5 | Bilingual static landing page and interactive mock demo | Planned |
+| 6 | Expanded tests, security hardening and future deployment guidance | Planned |
 
 ---
 
 # العربية
 
-## طريقة العمل المعتمدة
+## ما هو ATLAS AI؟
 
-هنشتغل أونلاين بالكامل من المتصفح باستخدام **GitHub Codespaces**. مش مطلوب تثبيت Python أو Docker على جهازك.
+منصة SaaS قيد التطوير لشركات السياحة، تعتمد على فريق من وكلاء الذكاء الاصطناعي المتخصصين في المبيعات والتسويق والمالية وخدمة العملاء والتقارير، مع وجود مدير عام ينسّق العمل ويرفع النتائج لصاحب الشركة للمراجعة والاعتماد.
 
-1. افتح المستودع على GitHub.
+**الموجود حاليًا هو مرحلة تأسيس المشروع فقط، وليس نظامًا تشغيليًا مكتملًا.**
+
+## طريقة العمل — أونلاين بالكامل
+
+1. افتح [مستودع ATLAS AI على GitHub](https://github.com/newhosttr3vel/ATLAS-AI).
 2. اضغط **Code → Codespaces → Create codespace on main**.
-3. افتح Terminal داخل Codespaces.
-4. نفّذ:
+3. انتظر تجهيز بيئة العمل السحابية.
+4. افتح Terminal من داخل المتصفح.
+
+بيئة Codespaces مجهزة لتوفير Python 3.11 وأدوات Docker وDocker Compose داخل البيئة السحابية، وتثبيت المكتبات تلقائيًا، وإنشاء ملف `.env` محلي غير مرفوع إلى GitHub.
+
+**مش محتاج تحمّل Docker Desktop أو Python أو أي برنامج على جهازك.** وحساب Docker مش مطلوب لتشغيل الحاويات داخل Codespaces.
+
+## تشغيل المشروع
+
+لتشغيل الاختبارات والـ API من Terminal داخل Codespaces:
 
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
 pytest -q
-uvicorn backend.main:app --host 0.0.0.0 --reload
+uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-افتح المنفذ 8000 من تبويب **Ports** للوصول إلى الـ API.
+بعدها افتح المنفذ **8000** من تبويب **Ports**:
 
-## Docker أونلاين
+- فحص حالة التطبيق: `/health`
+- توثيق الـ API: `/docs`
 
-Docker هيشتغل داخل بيئة Codespaces السحابية:
+لتشغيله باستخدام Docker:
 
 ```bash
 docker compose up --build
 ```
 
-مش محتاج تثبيت Docker Desktop على جهازك.
+ولإيقاف الخدمات:
 
-## مهم جدًا
+```bash
+docker compose down
+```
 
-- GitHub هو مكان حفظ الكود والـ Commits.
-- Codespaces هو مكان التطوير والتشغيل المؤقت.
-- GitHub Pages يعرض Demo ثابت فقط من مجلد `docs/`.
-- Codespaces ليس استضافة دائمة للـ Backend.
-- لا تضع أي API Key أو بيانات عملاء حقيقية في المستودع.
-- كل عرض أو رسالة حساسة تظل خاضعة لموافقة المالك.
+## الفرق بين الأدوات
 
-**المرحلة الحالية تأسيس فقط.** سنبدأ تنفيذ Backend والوكلاء بعد مراجعة اكتمال المرحلة الأولى.
+- **GitHub:** حفظ الكود وإدارة الإصدارات والتعديلات.
+- **GitHub Codespaces:** بيئة التطوير والتشغيل السحابية التي نستخدمها من المتصفح.
+- **Docker:** تشغيل خدمات المشروع داخل Codespaces، وليس على جهازك.
+- **GitHub Pages:** عرض النسخة التجريبية الثابتة فقط من مجلد `docs/`.
+- **الاستضافة الإنتاجية:** خطوة مستقبلية منفصلة؛ Codespaces ليس سيرفرًا دائمًا.
+
+## قواعد الأمان
+
+- لا ترفع أي API Key أو كلمة مرور أو Token إلى GitHub.
+- لا تستخدم بيانات عملاء حقيقية في النسخة التجريبية.
+- لا يتم تأكيد حجز أو سعر أو توافر، ولا إرسال رسالة للعميل، دون تحقق وموافقة المالك.
+- أي افتراض أو سعر تقديري يجب توضيحه وعدم تقديمه كحقيقة مؤكدة.
+
+## مراحل التنفيذ
+
+سننفذ المشروع على مراحل مستقلة، ونراجع نتيجة كل مرحلة واختباراتها قبل الانتقال إلى التالية. المرحلة الحالية هي **Phase 1 — Foundation**، وبعد اعتمادها نبدأ Backend والوكلاء في Phase 2.
