@@ -27,6 +27,8 @@ class Workspace:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, relative_path: str) -> Path:
+        if any(part.lower() in {".env", ".git", "secrets", "credentials"} or part.lower().startswith(".env.") for part in Path(relative_path).parts):
+            raise WorkspaceError("Access to secret and environment files is blocked.")
         candidate = (self.root / relative_path).resolve()
         if not candidate.is_relative_to(self.root):
             raise WorkspaceError("Path traversal is not allowed.")
@@ -38,7 +40,7 @@ class Workspace:
         for path in self.root.rglob("*"):
             if any(part in ignored for part in path.parts):
                 continue
-            if path.is_file():
+            if path.is_file() and not any(part.lower() == ".env" or part.lower().startswith(".env.") for part in path.parts):
                 found.append(path.relative_to(self.root).as_posix())
                 if len(found) >= limit:
                     break
@@ -61,6 +63,8 @@ class Workspace:
         return target.relative_to(self.root).as_posix()
 
     def run_command(self, argv: list[str], timeout: int = 90) -> dict[str, Any]:
+        if os.getenv("ATLAS_ENABLE_WORKSPACE_COMMANDS", "false").lower() != "true":
+            raise WorkspaceError("Command execution is disabled until an isolated runner is configured.")
         if not argv or not any(tuple(argv[:len(prefix)]) == prefix for prefix in ALLOWED_COMMANDS):
             raise WorkspaceError("Command is not in the ATLAS safe-command allowlist.")
         if any(token in {";", "&&", "||", "|", ">", "<", "$("} for token in argv):
@@ -68,6 +72,6 @@ class Workspace:
         completed = subprocess.run(
             argv, cwd=self.root, capture_output=True, text=True,
             timeout=min(max(timeout, 1), 120), check=False, shell=False,
-            env={**os.environ, "CI": "1", "PYTHONDONTWRITEBYTECODE": "1"},
+            env={"PATH": os.getenv("PATH", ""), "HOME": str(self.root), "CI": "1", "PYTHONDONTWRITEBYTECODE": "1"},
         )
         return {"exit_code": completed.returncode, "stdout": completed.stdout[-12000:], "stderr": completed.stderr[-12000:]}
