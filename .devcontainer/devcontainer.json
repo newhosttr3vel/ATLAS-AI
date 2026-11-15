@@ -6,14 +6,31 @@
       "moby": true,
       "version": "latest",
       "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
     }
   },
-  "forwardPorts": [8000, 8501],
+  "forwardPorts": [
+    3000,
+    8000,
+    8501
+  ],
   "portsAttributes": {
-    "8000": { "label": "ATLAS AI API", "onAutoForward": "notify" },
-    "8501": { "label": "ATLAS AI Dashboard", "onAutoForward": "notify" }
+    "3000": {
+      "label": "ATLAS AI Web Workspace",
+      "onAutoForward": "openBrowser"
+    },
+    "8000": {
+      "label": "ATLAS AI API",
+      "onAutoForward": "notify"
+    },
+    "8501": {
+      "label": "ATLAS AI Dashboard",
+      "onAutoForward": "notify"
+    }
   },
-  "postCreateCommand": "python -m pip install --upgrade pip && pip install -r requirements.txt && if [ ! -f .env ]; then cp .env.example .env; fi",
+  "postCreateCommand": "python -m pip install --upgrade pip && pip install -r requirements.txt && npm --prefix frontend install && if [ ! -f .env ]; then cp .env.example .env; fi",
   "customizations": {
     "vscode": {
       "extensions": [

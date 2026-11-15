@@ -85,6 +85,18 @@ No local Docker Desktop or Python installation is required; run these commands i
 - The agency ID header still selects a prototype workspace only. It is not authentication, membership, or authorization. Do not expose this prototype API to real customers or sensitive production data.
 - The registry and audit log are groundwork only. Secure SaaS onboarding, user accounts, agency memberships, role-based permissions, signed sessions, tenant-bound authentication, and production database migrations remain in the next security phase.
 
+## Browser-based Personal Engineer workspace
+
+A Next.js web interface now lives in `frontend/`. It reuses the existing agency registration/login endpoints, proxies browser API requests through Next.js to FastAPI, and provides a project prompt composer, engineering run history, and result inspection. In Codespaces, forward port **3000**. With Docker Compose, the web workspace is available on port **3000**, Streamlit remains on **8501**, and FastAPI remains on **8000**.
+
+Run it in Codespaces after the devcontainer installs Node.js 22:
+
+```bash
+npm --prefix frontend run dev
+```
+
+Set `ATLAS_BACKEND_INTERNAL_URL` for the Next.js server when the API is hosted elsewhere. The browser never receives the model provider secret.
+
 ## Dependencies
 
 - `requirements.txt`: core API, Streamlit, SQLAlchemy, HTTP client and test dependencies.
