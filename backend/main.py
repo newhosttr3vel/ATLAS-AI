@@ -15,8 +15,6 @@ from backend.database import SessionLocal, engine, get_db
 from backend.models import Agency, AuditLog, Base, Lead, Task
 from backend.auth import router as auth_router, workspace_router
 from backend.security import RequestContext, get_request_context, require_roles, validate_auth_config
-from backend.engineering.models import EngineeringRun  # noqa: F401 - register model metadata
-from backend.engineering.router import router as engineering_router
 from backend.schemas import (
     LeadCreate,
     LeadRead,
@@ -59,7 +57,6 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(workspace_router)
-app.include_router(engineering_router)
 
 general_manager = GeneralManagerAgent()
 report_writer = ReportWriterAgent()
