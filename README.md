@@ -85,6 +85,27 @@ No local Docker Desktop or Python installation is required; run these commands i
 - The agency ID header still selects a prototype workspace only. It is not authentication, membership, or authorization. Do not expose this prototype API to real customers or sensitive production data.
 - The registry and audit log are groundwork only. Secure SaaS onboarding, user accounts, agency memberships, role-based permissions, signed sessions, tenant-bound authentication, and production database migrations remain in the next security phase.
 
+## Personal AI Software Engineer (new foundation)
+
+ATLAS is being extended from deterministic agency-operation agents into a personal software-engineering workspace. The first foundation adds tenant-scoped engineering runs, an OpenAI-compatible tool-calling adapter, project-scoped file tools, an audit trail, and bounded execution steps.
+
+### Engineering API
+
+- `POST /api/engineering/runs`: start a coding task with `workspace`, `prompt`, and optional `max_steps`.
+- `GET /api/engineering/runs`: list the current agency's engineering runs.
+- Access is limited to signed-in owner/admin/manager roles (or the existing development-mode auth policy).
+- Project files are stored under `data/workspaces/{agency_id}/{workspace}`.
+- The agent can list, read, and write files inside that workspace. Path traversal and environment/secret files are blocked.
+- A provider can be configured using `LLM_API_KEY`, `LLM_MODEL`, and optional `LLM_BASE_URL` (OpenAI-compatible Chat Completions API).
+- Without provider credentials, the API explicitly stays in mock-safe mode and does not change project files.
+
+### Execution safety
+
+Shell access is not exposed. Test/inspection commands are allowlisted and command execution is disabled by default with `ATLAS_ENABLE_WORKSPACE_COMMANDS=false`. Keep it disabled until a separately isolated execution runner is deployed; enabling a flag alone is not a substitute for container/VM isolation. Deployment, publishing, destructive operations, and external infrastructure changes are outside this initial foundation and require human approval.
+
+This is an initial backend foundation, not yet a complete IDE or production deployment. The next milestone adds the browser-based engineering workspace, project Git integration, isolated runners, and live task progress.
+
+
 ## Dependencies
 
 - `requirements.txt`: core API, Streamlit, SQLAlchemy, HTTP client and test dependencies.
