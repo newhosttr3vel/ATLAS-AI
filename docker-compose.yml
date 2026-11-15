@@ -23,3 +23,17 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      ATLAS_BACKEND_INTERNAL_URL: http://api:8000
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped

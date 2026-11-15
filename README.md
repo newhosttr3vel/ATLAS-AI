@@ -85,26 +85,17 @@ No local Docker Desktop or Python installation is required; run these commands i
 - The agency ID header still selects a prototype workspace only. It is not authentication, membership, or authorization. Do not expose this prototype API to real customers or sensitive production data.
 - The registry and audit log are groundwork only. Secure SaaS onboarding, user accounts, agency memberships, role-based permissions, signed sessions, tenant-bound authentication, and production database migrations remain in the next security phase.
 
-## Personal AI Software Engineer (new foundation)
+## Browser-based Personal Engineer workspace
 
-ATLAS is being extended from deterministic agency-operation agents into a personal software-engineering workspace. The first foundation adds tenant-scoped engineering runs, an OpenAI-compatible tool-calling adapter, project-scoped file tools, an audit trail, and bounded execution steps.
+A Next.js web interface now lives in `frontend/`. It reuses the existing agency registration/login endpoints, proxies browser API requests through Next.js to FastAPI, and provides a project prompt composer, engineering run history, and result inspection. In Codespaces, forward port **3000**. With Docker Compose, the web workspace is available on port **3000**, Streamlit remains on **8501**, and FastAPI remains on **8000**.
 
-### Engineering API
+Run it in Codespaces after the devcontainer installs Node.js 22:
 
-- `POST /api/engineering/runs`: start a coding task with `workspace`, `prompt`, and optional `max_steps`.
-- `GET /api/engineering/runs`: list the current agency's engineering runs.
-- Access is limited to signed-in owner/admin/manager roles (or the existing development-mode auth policy).
-- Project files are stored under `data/workspaces/{agency_id}/{workspace}`.
-- The agent can list, read, and write files inside that workspace. Path traversal and environment/secret files are blocked.
-- A provider can be configured using `LLM_API_KEY`, `LLM_MODEL`, and optional `LLM_BASE_URL` (OpenAI-compatible Chat Completions API).
-- Without provider credentials, the API explicitly stays in mock-safe mode and does not change project files.
+```bash
+npm --prefix frontend run dev
+```
 
-### Execution safety
-
-Shell access is not exposed. Test/inspection commands are allowlisted and command execution is disabled by default with `ATLAS_ENABLE_WORKSPACE_COMMANDS=false`. Keep it disabled until a separately isolated execution runner is deployed; enabling a flag alone is not a substitute for container/VM isolation. Deployment, publishing, destructive operations, and external infrastructure changes are outside this initial foundation and require human approval.
-
-This is an initial backend foundation, not yet a complete IDE or production deployment. The next milestone adds the browser-based engineering workspace, project Git integration, isolated runners, and live task progress.
-
+Set `ATLAS_BACKEND_INTERNAL_URL` for the Next.js server when the API is hosted elsewhere. The browser never receives the model provider secret.
 
 ## Dependencies
 
